@@ -1,0 +1,252 @@
+/**
+ * @module
+ * The application: container, routes and server, started and stopped together.
+ *
+ * ```ts
+ * const app = await createApp(AppModule, { prefix: '/api' })
+ *
+ * app.enableShutdownSignals()
+ * await app.listen(3000)
+ * ```
+ *
+ * Startup creates the container (every singleton, every `onInit`), then the
+ * guards, interceptors and filters (their `onInit` too), and only then accepts
+ * requests.
+ *
+ * Shutdown stops accepting requests first and waits for the ones in flight,
+ * then runs `onDestroy` (guards and the like, then the container). Nest closes
+ * the server after `onModuleDestroy`, so requests still arrive while services
+ * are being destroyed; here they cannot.
+ */
+
+import { createContainer } from '../di'
+import type { Container, ContainerOptions, ModuleImport } from '../di'
+import { destroyAll, initializeAll } from '../di/lifecycle'
+import { buildRoutes } from '../http'
+import type { ControllerRoutesOptions } from '../http'
+import { compileRoutes } from '../routing'
+import type { CompiledRoutes, CompileOptions } from '../routing'
+import { release, takeOver } from './hot'
+
+/**
+ * Options of `createApp`.
+ */
+export interface AppOptions extends ContainerOptions, ControllerRoutesOptions, CompileOptions {}
+
+/**
+ * Where to listen. `port: 0` picks a free port.
+ */
+export interface ListenOptions {
+  readonly port?: number
+  readonly hostname?: string
+}
+
+/** Signals `enableShutdownSignals()` listens to by default. */
+const DEFAULT_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
+
+/**
+ * A created application.
+ */
+export interface App {
+  readonly container: Container
+  /** Routes for `Bun.serve()`, when serving them yourself instead of calling `listen()`. */
+  readonly routes: CompiledRoutes
+  /** The server once `listen()` resolved. */
+  readonly server: Bun.Server<undefined> | undefined
+  /**
+   * Starts serving. Under `bun --hot`, a new version of the application
+   * listening on the same port takes the server over from the previous one,
+   * which is then destroyed (its server is not stopped: it is shared).
+   */
+  listen(options?: number | ListenOptions): Promise<Bun.Server<undefined>>
+  /**
+   * Graceful shutdown: refuses new requests, waits for those in flight, then
+   * runs `onDestroy` hooks. Safe to call more than once, even from a hook.
+   */
+  close(): Promise<void>
+  /**
+   * Closes the application on `SIGTERM` and `SIGINT` (or `signals`), then lets
+   * the signal terminate the process. Off by default, as Nest's `enableShutdownHooks()`.
+   */
+  enableShutdownSignals(signals?: readonly NodeJS.Signals[]): this
+}
+
+class Application implements App {
+  readonly container: Container
+  readonly routes: CompiledRoutes
+  #server: Bun.Server<undefined> | undefined
+  /** Set when a new version took the server over: it must not be stopped. */
+  #handedOver = false
+  #closing: Promise<void> | undefined
+  readonly #enhancers: readonly unknown[]
+  readonly #signals = new Map<NodeJS.Signals, () => void>()
+
+  constructor(container: Container, routes: CompiledRoutes, enhancers: readonly unknown[]) {
+    this.container = container
+    this.routes = routes
+    this.#enhancers = enhancers
+  }
+
+  get server(): Bun.Server<undefined> | undefined {
+    return this.#server
+  }
+
+  async listen(options: number | ListenOptions = {}): Promise<Bun.Server<undefined>> {
+    if (this.#closing !== undefined) {
+      throw new Error('Cannot listen: the application is closed')
+    }
+
+    if (this.#server !== undefined) {
+      throw new Error(`The application already listens on ${this.#server.url.href}`)
+    }
+
+    const { port = 0, hostname } = typeof options === 'number' ? { port: options } : options
+
+    const server = Bun.serve({ port, hostname, ...this.routes })
+
+    this.#server = server
+
+    if (server.port !== undefined) {
+      await takeOver(server.port, this)
+    }
+
+    return server
+  }
+
+  /** Destroys this version without stopping the server a newer version now uses. */
+  handOver(): Promise<void> {
+    this.#handedOver = true
+
+    return this.close()
+  }
+
+  close(): Promise<void> {
+    if (this.#closing === undefined) {
+      // Assigned before anything runs, so a hook calling close() gets this promise.
+      const { promise, resolve, reject } = Promise.withResolvers<void>()
+
+      this.#closing = promise
+      this.#shutdown().then(resolve, reject)
+    }
+
+    return this.#closing
+  }
+
+  enableShutdownSignals(signals: readonly NodeJS.Signals[] = DEFAULT_SIGNALS): this {
+    for (const signal of signals) {
+      if (this.#signals.has(signal)) {
+        continue
+      }
+
+      const listener = (): void => {
+        // A second signal while closing is ignored: the first one finishes the job.
+        if (this.#closing !== undefined) {
+          return
+        }
+
+        this.close().then(
+          () => {
+            this.#removeSignalListeners()
+            // Terminate as the signal would have, exit code included.
+            process.kill(process.pid, signal)
+          },
+          (error: unknown) => {
+            console.error('Error during shutdown', error)
+            process.exit(1)
+          }
+        )
+      }
+
+      this.#signals.set(signal, listener)
+      process.on(signal, listener)
+    }
+
+    return this
+  }
+
+  async #shutdown(): Promise<void> {
+    const server = this.#server
+
+    try {
+      if (server !== undefined && !this.#handedOver) {
+        await server.stop()
+      }
+
+      await destroyEverything(this.#enhancers, this.container)
+    } finally {
+      // Whatever happened, signals get their default behaviour back.
+      this.#removeSignalListeners()
+
+      if (server?.port !== undefined) {
+        release(server.port, this)
+      }
+    }
+  }
+
+  #removeSignalListeners(): void {
+    for (const [signal, listener] of this.#signals) {
+      process.off(signal, listener)
+    }
+
+    this.#signals.clear()
+  }
+}
+
+const errorsOf = (error: unknown): unknown[] => (error instanceof AggregateError ? error.errors : [error])
+
+/**
+ * Destroys guards and the like, then the container; every hook runs.
+ * One failure is rethrown as is, several as an `AggregateError`.
+ */
+const destroyEverything = async (enhancers: readonly unknown[], container: Container): Promise<void> => {
+  const errors: unknown[] = []
+
+  try {
+    await destroyAll(enhancers)
+  } catch (error) {
+    errors.push(...errorsOf(error))
+  }
+
+  try {
+    await container.close()
+  } catch (error) {
+    errors.push(...errorsOf(error))
+  }
+
+  if (errors.length === 1) {
+    throw errors[0]
+  }
+
+  if (errors.length > 1) {
+    throw new AggregateError(errors, `${errors.length} onDestroy hooks failed`)
+  }
+}
+
+/**
+ * Creates the container and the routes, and runs every `onInit` hook.
+ *
+ * If anything fails, what was created is destroyed and the error is rethrown;
+ * if destroying fails too, everything comes as one `AggregateError`, startup
+ * error first, as `createContainer` does.
+ */
+export const createApp = async (root: ModuleImport, options: AppOptions = {}): Promise<App> => {
+  const container = await createContainer(root, options)
+  let enhancers: readonly unknown[] = []
+
+  try {
+    const built = buildRoutes(container, options)
+
+    enhancers = built.enhancers
+    await initializeAll(enhancers)
+
+    return new Application(container, compileRoutes(built.routes, options), enhancers)
+  } catch (error) {
+    try {
+      await destroyEverything(enhancers, container)
+    } catch (destroyError) {
+      throw new AggregateError([error, ...errorsOf(destroyError)], 'Startup failed, and onDestroy hooks failed while rolling back')
+    }
+
+    throw error
+  }
+}
