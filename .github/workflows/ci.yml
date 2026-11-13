@@ -21,6 +21,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
-      - run: bun run test
       - run: bun run build
-      - run: bun pm pack --dry-run
+      - run: bun run test
+
+      - name: Check what each package would publish
+        run: |
+          for package in packages/*/; do
+            (cd "$package" && bun pm pack --dry-run)
+          done

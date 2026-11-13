@@ -1,12 +1,15 @@
 name: Release
 
-# Publishes to npm when a version tag is pushed: git tag v0.2.0 && git push origin v0.2.0
+# Publishes one package to npm when its tag is pushed:
+#   core-v0.2.0         → packages/core (@getsoda/core)
+#   create-soda-v0.2.0  → packages/create-soda (create-soda)
 # Uses npm trusted publishing (OIDC): no token, provenance attached automatically.
-# The first version must be published by hand, trusted publishing only works for existing packages.
+# The first version of a package must be published by hand: trusted publishing
+# only works for packages that already exist.
 
 on:
   push:
-    tags: ['v*']
+    tags: ['core-v*', 'create-soda-v*']
 
 permissions:
   contents: read
@@ -30,17 +33,33 @@ jobs:
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install --global npm@latest
 
-      - name: Check that the tag matches the package version
+      - name: Find the package and check its version against the tag
+        id: package
         run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json version $version"
+          tag="$GITHUB_REF_NAME"
+          name="${tag%-v*}"
+          version="${tag##*-v}"
+          directory="packages/$name"
+
+          if [ ! -f "$directory/package.json" ]; then
+            echo "No package for tag $tag ($directory)"
             exit 1
           fi
+
+          actual="$(node -p "require('./$directory/package.json').version")"
+
+          if [ "$actual" != "$version" ]; then
+            echo "Tag $tag does not match $directory/package.json version $actual"
+            exit 1
+          fi
+
+          echo "directory=$directory" >> "$GITHUB_OUTPUT"
 
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
-      - run: bun run test
       - run: bun run build
+      - run: bun run test
+
       - run: npm publish --access public --ignore-scripts
+        working-directory: ${{ steps.package.outputs.directory }}
