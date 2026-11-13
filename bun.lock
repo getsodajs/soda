@@ -8,9 +8,7 @@
         "@stylistic/eslint-plugin": "5.10.0",
         "@types/bun": "latest",
         "oxlint": "1.93.0",
-      },
-      "peerDependencies": {
-        "typescript": "^7",
+        "typescript": "7.0.2",
       },
     },
   },
