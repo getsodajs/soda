@@ -16,6 +16,7 @@ export type {
   MethodRouteDecoratorFactory,
   RouteDecorator,
   RouteDecoratorFactory,
+  RouteHandlerHint,
   RouteHandlerMethod,
 } from './decorators.ts'
 export { ControllerError } from './errors.ts'

@@ -1,0 +1,45 @@
+import { expect, it } from 'bun:test'
+import { param } from './arguments.ts'
+import type { Context } from './context.ts'
+import { Controller, Get } from './decorators.ts'
+
+// Checked by the type checker: each @ts-expect-error must stay an error.
+@Controller('sub')
+class Handlers {
+  @Get(':token')
+  context(ctx: Context<':token'>) {
+    return ctx.param('token')
+  }
+
+  @Get(':token')
+  anyContext(ctx: Context) {
+    return ctx.url
+  }
+
+  @Get()
+  nothing() {
+    return null
+  }
+
+  @Get(':token', [param('token')])
+  listed(token: string | undefined) {
+    return token
+  }
+
+  // A value without an argument list: the error explains how to receive it.
+  // @ts-expect-error Without an argument list, the method receives the context: (ctx: Context<':token'>)...
+  @Get(':token')
+  value(token: string) {
+    return token
+  }
+
+  // @ts-expect-error The context of another path.
+  @Get(':id')
+  otherPath(ctx: Context<':other'>) {
+    return ctx
+  }
+}
+
+it('accepts the handler signatures a route allows', () => {
+  expect(new Handlers().nothing()).toBeNull()
+})

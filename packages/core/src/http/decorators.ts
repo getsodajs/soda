@@ -65,10 +65,17 @@ export type RouteHandlerMethod<This, P extends string> =
 /**
  * Decorator of a route without argument list: `@Get(':id')`.
  */
-export type RouteDecorator<P extends string> = <This, M extends RouteHandlerMethod<This, P>>(
-  method: M,
+export type RouteDecorator<P extends string> = <This, M extends (this: This, ...args: any[]) => unknown>(
+  method: M extends RouteHandlerMethod<This, P> ? M : RouteHandlerHint<P>,
   context: ClassMethodDecoratorContext<This, M>
 ) => void
+
+/**
+ * What the compiler shows for a method that does not fit a route without
+ * argument list, such as `findOne(id: string)` under `@Get(':id')`.
+ */
+export type RouteHandlerHint<P extends string> =
+  `Without an argument list, the method receives the context: (ctx: Context<'${P}'>). To receive values, list them: @Get('${P}', [param('name')]).`
 
 /**
  * Decorator of a route with an argument list: `@Get(':id', [param('id', int())])`.
