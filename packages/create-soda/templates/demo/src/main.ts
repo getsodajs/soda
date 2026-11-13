@@ -1,9 +1,10 @@
 import { cors, createApp } from '@getsoda/core'
 import { AppModule } from './app.module.ts'
+import { AppConfig } from './config.ts'
 
-const app = await createApp(AppModule, {
-  middleware: [cors({ origin: process.env.CORS_ORIGIN ?? '*' })],
-})
+// Loaded first for what the application needs before it exists; services inject it.
+const config = await AppConfig.load()
+const app = await createApp(AppModule, { middleware: [cors({ origin: config.CORS_ORIGIN })] })
 
 app.enableShutdownSignals()
-await app.listen(Number(process.env.PORT ?? 3000))
+await app.listen(config.PORT)

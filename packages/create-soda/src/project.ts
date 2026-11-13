@@ -10,6 +10,7 @@
  * repository does not take it for a nested configuration.
  */
 
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { cp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
@@ -24,7 +25,7 @@ export interface Template {
 /** Templates in the order they are offered; the first is the default. */
 export const TEMPLATES: readonly Template[] = [
   { name: 'minimal', label: 'Minimal', hint: 'a module, a controller, a service and a test' },
-  { name: 'demo', label: 'Demo', hint: 'users with validation, a guard, logging and CORS' },
+  { name: 'demo', label: 'Demo', hint: 'JWT sign-in with cookies, typed config, users with validation, CORS' },
 ]
 
 /** Template files renamed when copied. */
@@ -81,7 +82,25 @@ export interface ProjectOptions {
 }
 
 /**
- * Copies the template into `dir`, renames `_gitignore`, sets the package name and the core version.
+ * `.env` from `.env.example`, each empty `*_SECRET=` given a random value, so
+ * that a project runs at once with secrets of its own.
+ */
+const writeEnv = async (root: string): Promise<void> => {
+  const example = join(root, '.env.example')
+  const env = join(root, '.env')
+
+  if (!existsSync(example) || existsSync(env)) {
+    return
+  }
+
+  const content = await readFile(example, 'utf8')
+
+  await writeFile(env, content.replace(/^(\w+_SECRET)=$/gm, (_, key: string) => `${key}=${randomBytes(32).toString('base64url')}`))
+}
+
+/**
+ * Copies the template into `dir`, renames `_gitignore`, writes `.env`, sets
+ * the package name and the core version.
  */
 export const createProject = async (options: ProjectOptions): Promise<void> => {
   const root = resolve(options.dir)
@@ -93,6 +112,8 @@ export const createProject = async (options: ProjectOptions): Promise<void> => {
       await rename(join(root, from), join(root, to))
     }
   }
+
+  await writeEnv(root)
 
   const manifestPath = join(root, 'package.json')
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {

@@ -65,8 +65,15 @@ describe('create-soda', () => {
     const demo = await create(['demo-app', '--template', 'demo'])
     const unknown = await create(['other-app', '-t', 'nope'])
 
+    const env = await Bun.file(join(directory, 'demo-app', '.env')).text()
+    const secret = /^JWT_SECRET=(\S+)$/m.exec(env)?.[1]
+
     expect(demo.code).toBe(0)
     expect(existsSync(join(directory, 'demo-app', 'src', 'users', 'users.controller.ts'))).toBe(true)
+    // A secret of its own: 32 random bytes, in base64url.
+    expect(secret).toMatch(/^[\w-]{43}$/)
+    expect(await Bun.file(join(directory, 'demo-app', '.env.example')).text()).toContain('JWT_SECRET=\n')
+    expect(existsSync(join(directory, 'my-app', '.env'))).toBe(false)
     expect(unknown.code).toBe(1)
     expect(unknown.stderr).toContain('Unknown template "nope"; use minimal or demo')
     expect(existsSync(join(directory, 'other-app'))).toBe(false)
@@ -116,7 +123,7 @@ beforeAll(async () => {
 }, 60_000)
 
 /** Tests each generated project passes, by template. */
-const PASSING: Readonly<Record<string, number>> = { minimal: 1, demo: 2 }
+const PASSING: Readonly<Record<string, number>> = { minimal: 1, demo: 4 }
 
 describe.each(TEMPLATES.map((template) => template.name))('generated %s project', (template) => {
   const root = join(directory, `e2e-${template}`)

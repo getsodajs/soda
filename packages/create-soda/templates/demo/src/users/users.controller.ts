@@ -1,7 +1,7 @@
 import { body, Controller, Get, inject, int, NotFoundException, param, Post, UseGuards, value } from '@getsoda/core'
+import { JWT_PAYLOAD, JwtGuard } from '@getsoda/core/jwt'
+import type { JwtPayload } from '@getsoda/core/jwt'
 import { z } from 'zod'
-import { AuthGuard, CURRENT_USER } from '../auth/auth.guard.ts'
-import type { CurrentUser } from '../auth/auth.guard.ts'
 import { UsersService } from './users.service.ts'
 import type { User } from './users.service.ts'
 
@@ -27,9 +27,9 @@ export class UsersController {
     return user
   }
 
-  @Post([body(CreateUser), value(CURRENT_USER)])
-  @UseGuards(AuthGuard)
-  create(input: z.infer<typeof CreateUser>, currentUser: CurrentUser): User {
-    return this.#users.create(input.name, currentUser.name)
+  @Post([body(CreateUser), value(JWT_PAYLOAD)])
+  @UseGuards(JwtGuard)
+  create(input: z.infer<typeof CreateUser>, author: JwtPayload): User {
+    return this.#users.create(input.name, author.sub ?? 'unknown')
   }
 }
