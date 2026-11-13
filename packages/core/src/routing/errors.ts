@@ -3,6 +3,8 @@
  * Errors raised by the route compiler.
  */
 
+import { hideFrameworkFrames } from '../utils/errors.ts'
+
 /**
  * Reason of a `RouteError`.
  *
@@ -26,5 +28,6 @@ export class RouteError extends Error {
     message: string
   ) {
     super(message)
+    hideFrameworkFrames(this)
   }
 }

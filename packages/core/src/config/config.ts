@@ -24,6 +24,7 @@
 import { InjectionToken } from '../di/token.ts'
 import { formatIssues } from '../http/schema.ts'
 import type { InferOutput, StandardSchemaV1 } from '../http/schema.ts'
+import { hideFrameworkFrames } from '../utils/errors.ts'
 
 /** Environment variables, as in `process.env`. */
 export type Environment = Readonly<Record<string, string | undefined>>
@@ -37,6 +38,7 @@ export class ConfigError extends Error {
     readonly issues: readonly string[]
   ) {
     super(`Invalid configuration "${config}":\n  ${issues.join('\n  ')}`)
+    hideFrameworkFrames(this)
   }
 }
 

@@ -3,6 +3,8 @@
  * Errors raised while declaring and collecting controllers.
  */
 
+import { hideFrameworkFrames } from '../utils/errors.ts'
+
 /**
  * Reason of a `ControllerError`.
  *
@@ -35,5 +37,6 @@ export class ControllerError extends Error {
     message: string
   ) {
     super(message)
+    hideFrameworkFrames(this)
   }
 }

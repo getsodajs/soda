@@ -3,6 +3,8 @@
  * Errors raised by the dependency injection container.
  */
 
+import { hideFrameworkFrames } from '../utils/errors.ts'
+
 /**
  * Reason of a `DiError`.
  *
@@ -42,5 +44,6 @@ export class DiError extends Error {
     message: string
   ) {
     super(message)
+    hideFrameworkFrames(this)
   }
 }
