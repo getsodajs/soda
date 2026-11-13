@@ -150,10 +150,10 @@ describe.each(TEMPLATES.map((template) => template.name))('generated %s project'
   }, 60_000)
 
   it('passes its own lint', async () => {
-    const result = await run(root, ['bun', 'run', 'lint'])
+    // Warnings fail too: a new project must be clean.
+    const result = await run(root, ['bun', 'run', 'lint', '--deny-warnings'])
 
     expect(result.code, result.output).toBe(0)
-    expect(result.output).not.toContain('warning')
   }, 60_000)
 
   it('builds a bundle that serves requests', async () => {
