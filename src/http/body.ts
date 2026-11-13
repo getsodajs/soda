@@ -7,7 +7,7 @@
  * merge) may then pollute `Object.prototype`. As Fastify's `secure-json-parse`
  * does, such bodies are rejected, not silently cleaned:
  *
- * 1. the raw text is tested with two regexes (which also catch `_`-escaped
+ * 1. the raw text is tested with two regexes (which also catch `\u005f`-escaped
  *    keys, since `JSON.parse` decodes them into the same key); a normal body
  *    stops here and costs one plain `JSON.parse`;
  * 2. only a suspicious body is parsed with a reviver that rejects `__proto__`,

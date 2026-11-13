@@ -9,16 +9,16 @@
  *
  * ```ts
  * '%41'        => 'A'
- * 'a%zzb'      => 'a�b'   // malformed escape: '%' plus two characters
- * 'a%z'        => 'a�z'   // malformed escape at the end: '%' only
- * '%E2%9C'     => '�'     // truncated sequence: one replacement
- * '%ED%A0%80'  => '�'     // surrogate: one replacement for the whole sequence
- * '%C0%AF'     => '�'     // overlong: one replacement for the whole sequence
- * '%F8%80'     => '��' // invalid lead byte and lone continuation byte
+ * 'a%zzb'      => 'a\uFFFDb'   // malformed escape: '%' plus two characters
+ * 'a%z'        => 'a\uFFFDz'   // malformed escape at the end: '%' only
+ * '%E2%9C'     => '\uFFFD'     // truncated sequence: one replacement
+ * '%ED%A0%80'  => '\uFFFD'     // surrogate: one replacement for the whole sequence
+ * '%C0%AF'     => '\uFFFD'     // overlong: one replacement for the whole sequence
+ * '%F8%80'     => '\uFFFD\uFFFD' // invalid lead byte and lone continuation byte
  * ```
  */
 
-const REPLACEMENT = '�'
+const REPLACEMENT = '\uFFFD'
 const PERCENT = 0x25
 
 /** Smallest code point allowed for a sequence of the given length (rejects overlong forms). */

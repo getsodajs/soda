@@ -246,7 +246,7 @@ describe('wildcards', () => {
     expect(await call('GET', '/files')).toEqual([200, 'files', { path: '' }])
     expect(await call('GET', '/files/')).toEqual([200, 'files', { path: '' }])
     expect(await call('GET', '/files/a/b%20c')).toEqual([200, 'files', { path: 'a/b c' }])
-    expect(await call('GET', '/files/a%zz/b')).toEqual([200, 'files', { path: 'a�/b' }])
+    expect(await call('GET', '/files/a%zz/b')).toEqual([200, 'files', { path: 'a\uFFFD/b' }])
   })
 
   it('computes a named wildcard inside a more specific native route', async () => {

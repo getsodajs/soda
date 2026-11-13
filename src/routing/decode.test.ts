@@ -12,28 +12,28 @@ describe('decodeComponent', () => {
     ['%e2%9c%93', '✓'],
     ['%F0%9F%98%80', '😀'],
     ['%C2%80', '\u0080'],
-    ['%ED%9F%BF', '퟿'],
-    ['%EE%80%80', ''],
+    ['%ED%9F%BF', '\uD7FF'],
+    ['%EE%80%80', '\uE000'],
   ])('decodes %s', (input, expected) => {
     expect(decodeComponent(input)).toBe(expected)
   })
 
   it.each([
-    ['a%zzb', 'a�b'],
-    ['a%zzz', 'a�z'],
-    ['a%z', 'a�z'],
-    ['%', '�'],
-    ['%4', '�4'],
-    ['%%41', '�1'],
-    ['%E2%9C', '�'],
-    ['%E2%9Cx%93', '�x�'],
-    ['%C2%C2%80', '�\u0080'],
-    ['%C0%AF', '�'],
-    ['%E0%80%80', '�'],
-    ['%ED%A0%80', '�'],
-    ['%F4%90%80%80', '�'],
-    ['%F8%80', '��'],
-    ['%FF%FF', '��'],
+    ['a%zzb', 'a\uFFFDb'],
+    ['a%zzz', 'a\uFFFDz'],
+    ['a%z', 'a\uFFFDz'],
+    ['%', '\uFFFD'],
+    ['%4', '\uFFFD4'],
+    ['%%41', '\uFFFD1'],
+    ['%E2%9C', '\uFFFD'],
+    ['%E2%9Cx%93', '\uFFFDx\uFFFD'],
+    ['%C2%C2%80', '\uFFFD\u0080'],
+    ['%C0%AF', '\uFFFD'],
+    ['%E0%80%80', '\uFFFD'],
+    ['%ED%A0%80', '\uFFFD'],
+    ['%F4%90%80%80', '\uFFFD'],
+    ['%F8%80', '\uFFFD\uFFFD'],
+    ['%FF%FF', '\uFFFD\uFFFD'],
   ])('replaces malformed input %s like Bun', (input, expected) => {
     expect(decodeComponent(input)).toBe(expected)
   })
