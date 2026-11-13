@@ -10,7 +10,8 @@
     "typecheck": "bun check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "test": "bun test"
+    "test": "bun test",
+    "release:version": "bun scripts/set-version.ts"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "5.10.0",

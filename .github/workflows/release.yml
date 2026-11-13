@@ -1,15 +1,18 @@
 name: Release
 
-# Publishes one package to npm when its tag is pushed:
-#   core-v0.2.0         → packages/core (@getsoda/core)
-#   create-soda-v0.2.0  → packages/create-soda (create-soda)
-# Uses npm trusted publishing (OIDC): no token, provenance attached automatically.
-# The first version of a package must be published by hand: trusted publishing
-# only works for packages that already exist.
+# Publishes every package when a version tag is pushed: v0.2.0 publishes
+# @getsoda/core 0.2.0, then create-soda 0.2.0, which creates projects
+# depending on that core. The packages share one version, so the generator
+# never points at a core released from another commit.
+#
+# Set the version with `bun run release:version 0.2.0`, commit, then tag.
+# Uses npm trusted publishing (OIDC): no token, provenance attached
+# automatically. A package version already on npm is skipped, so a failed
+# release can be run again.
 
 on:
   push:
-    tags: ['core-v*', 'create-soda-v*']
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -33,27 +36,18 @@ jobs:
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install --global npm@latest
 
-      - name: Find the package and check its version against the tag
-        id: package
+      - name: Check the package versions against the tag
         run: |
-          tag="$GITHUB_REF_NAME"
-          name="${tag%-v*}"
-          version="${tag##*-v}"
-          directory="packages/$name"
+          version="${GITHUB_REF_NAME#v}"
 
-          if [ ! -f "$directory/package.json" ]; then
-            echo "No package for tag $tag ($directory)"
-            exit 1
-          fi
+          for directory in packages/core packages/create-soda; do
+            actual="$(node -p "require('./$directory/package.json').version")"
 
-          actual="$(node -p "require('./$directory/package.json').version")"
-
-          if [ "$actual" != "$version" ]; then
-            echo "Tag $tag does not match $directory/package.json version $actual"
-            exit 1
-          fi
-
-          echo "directory=$directory" >> "$GITHUB_OUTPUT"
+            if [ "$actual" != "$version" ]; then
+              echo "Tag $GITHUB_REF_NAME does not match $directory/package.json version $actual"
+              exit 1
+            fi
+          done
 
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -61,5 +55,16 @@ jobs:
       - run: bun run build
       - run: bun run test
 
-      - run: npm publish --access public --ignore-scripts
-        working-directory: ${{ steps.package.outputs.directory }}
+      # The core first: create-soda points at it.
+      - name: Publish
+        run: |
+          for directory in packages/core packages/create-soda; do
+            name="$(node -p "require('./$directory/package.json').name")"
+            version="$(node -p "require('./$directory/package.json').version")"
+
+            if npm view "$name@$version" version > /dev/null 2>&1; then
+              echo "$name@$version is already published"
+            else
+              (cd "$directory" && npm publish --access public --ignore-scripts)
+            fi
+          done
