@@ -97,6 +97,39 @@ class SessionController {
 
 Name cookies that guard sessions with the `__Host-` prefix: browsers then refuse them from subdomains and over HTTP.
 
+## JWT
+
+`@getsoda/core/jwt` signs and verifies JSON Web Tokens with WebCrypto: HS256/384/512, RS, PS, ES and EdDSA, keys as secrets, PEM, JWK or `CryptoKey`. The algorithm is fixed by the options, never read from the token, so `alg: none` and algorithm confusion are refused.
+
+```ts
+import { JWT_PAYLOAD, JwtGuard, JwtModule, JwtService } from '@getsoda/core/jwt'
+import type { JwtPayload } from '@getsoda/core/jwt'
+
+@Controller('auth')
+class AuthController {
+  readonly #jwt = inject(JwtService)
+
+  @Post('login')
+  async login() {
+    return { token: await this.#jwt.sign({ sub: 'user-1' }) }
+  }
+
+  @Get('me', [value(JWT_PAYLOAD)])
+  @UseGuards(JwtGuard) // Authorization: Bearer <token>, or the `cookie` option; 401 otherwise
+  me(payload: JwtPayload) {
+    return payload
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: process.env.JWT_SECRET!, expiresIn: 15 * 60 })],
+  controllers: [AuthController],
+})
+class AuthModule {}
+```
+
+`JwtModule.registerAsync({ inject, useFactory })` takes the options from other providers; `new JwtService(options)` works without the module.
+
 ## License
 
 [MIT](./LICENSE)
