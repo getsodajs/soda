@@ -3,9 +3,10 @@
  * HTTP layer for Soda: controllers, route decorators, request context, validation, exceptions.
  */
 
-export { body, context, header, param, query } from './arguments.ts'
+export { body, context, header, param, query, value } from './arguments.ts'
 export type { Argument, ArgumentFor, ArgumentKind, ArgumentValues } from './arguments.ts'
 export { Context } from './context.ts'
+export { ContextKey } from './context-key.ts'
 export type { ContextParams, ParamNameOf } from './context.ts'
 export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Route } from './decorators.ts'
 export type {

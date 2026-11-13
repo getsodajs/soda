@@ -16,18 +16,19 @@
  * called by the framework before the method instead of by the method itself.
  */
 
+import type { ContextKey } from './context-key.ts'
 import type { Context, ParamNameOf } from './context.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 
-export type ArgumentKind = 'param' | 'query' | 'header' | 'body' | 'context'
+export type ArgumentKind = 'param' | 'query' | 'header' | 'body' | 'context' | 'value'
 
 /**
  * One argument of a handler: where it comes from and how it is read.
  */
 export interface Argument<T, K extends ArgumentKind = ArgumentKind, N extends string = string> {
   readonly kind: K
-  /** Parameter, query or header name; empty for `body` and `context`. */
+  /** Parameter, query or header name; the key description for `value`; empty for `body` and `context`. */
   readonly name: N
   readonly read: (ctx: Context) => T | Promise<T>
 }
@@ -91,3 +92,18 @@ export function body(schema?: StandardSchemaV1): Argument<unknown, 'body'> {
 
 /** The context itself, for what no other argument covers. Like `@Req()`. */
 export const context = (): Argument<Context, 'context'> => ({ kind: 'context', name: '', read: (ctx) => ctx })
+
+/**
+ * Value a guard or an interceptor attached to the request. Like a custom Nest
+ * parameter decorator such as `@User()`.
+ *
+ * ```ts
+ * @Get('me', [value(USER)])
+ * me(user: User) {}
+ * ```
+ */
+export const value = <T>(key: ContextKey<T>): Argument<T, 'value'> => ({
+  kind: 'value',
+  name: key.description,
+  read: (ctx) => ctx.get(key),
+})

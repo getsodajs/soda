@@ -2,8 +2,9 @@ import { afterAll, describe, expect, it } from 'bun:test'
 import { createContainer, inject, Module } from '../di/index.ts'
 import type { ModuleClass } from '../di/index.ts'
 import { compileRoutes } from '../routing/index.ts'
-import { param } from './arguments.ts'
+import { param, value } from './arguments.ts'
 import type { Context } from './context.ts'
+import { ContextKey } from './context-key.ts'
 import { Controller, Get } from './decorators.ts'
 import { Catch, createDecorator, UseFilters, UseGuards, UseInterceptors } from './enhancers.ts'
 import type { CanActivate, ExceptionFilter, Interceptor } from './enhancers.ts'
@@ -391,5 +392,73 @@ describe('fast path', () => {
     const result = route!.handler(new Request('http://localhost/s'), {})
 
     expect(result).toBeInstanceOf(Response)
+  })
+})
+
+describe('request values', () => {
+  interface User {
+    readonly name: string
+  }
+
+  const USER = new ContextKey<User>('user')
+  const LOCALE = new ContextKey<string>('locale', () => 'en')
+
+  const authenticate = (ctx: Context): boolean => {
+    const token = ctx.header('authorization')
+
+    if (token === undefined) {
+      return false
+    }
+
+    ctx.set(USER, { name: token })
+
+    return true
+  }
+
+  it('passes what a guard found to the handler, through the context or as an argument', async () => {
+    @Controller('/v')
+    @UseGuards(authenticate)
+    class ValuesController {
+      @Get('/context')
+      fromContext(ctx: Context): string {
+        return `${ctx.get(USER).name} ${ctx.get(LOCALE)}`
+      }
+
+      @Get('/argument', [value(USER)])
+      asArgument(user: User): string {
+        return user.name
+      }
+    }
+
+    @Module({ controllers: [ValuesController] })
+    class AppModule {}
+
+    const request = await serve(AppModule)
+
+    expect(await (await request('/v/context', { authorization: 'ann' })).text()).toBe('ann en')
+    expect(await (await request('/v/argument', { authorization: 'bo' })).text()).toBe('bo')
+    expect((await request('/v/argument')).status).toBe(403)
+  })
+
+  it('reports a value nobody set as a programming error, not as undefined', async () => {
+    const logged: unknown[] = []
+
+    @Controller('/unguarded')
+    class UnguardedController {
+      @Get()
+      read(ctx: Context): string {
+        return ctx.has(USER) ? 'set' : ctx.get(USER).name
+      }
+    }
+
+    @Module({ controllers: [UnguardedController] })
+    class AppModule {}
+
+    const response = await (await serve(AppModule, { onError: (error) => logged.push(error) }))('/unguarded')
+
+    expect(response.status).toBe(500)
+    expect((logged[0] as Error).message).toBe(
+      'ContextKey(user) is not set for UnguardedController.read: is the guard or interceptor that sets it applied to this route?'
+    )
   })
 })

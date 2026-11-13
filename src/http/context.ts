@@ -5,6 +5,7 @@
 
 import type { Constructor } from '../di/index.ts'
 import { readJsonBody } from './body.ts'
+import type { ContextKey } from './context-key.ts'
 import type { MetadataDecorator } from './enhancers.ts'
 import { applyParser } from './parsers.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
@@ -49,17 +50,53 @@ export interface RouteInfo {
  * }
  * ```
  *
- * The URL is parsed only when `url` or `query()` is used; the body is read at most once.
+ * The URL is parsed only when `url` or `query()` is used; the body is read at
+ * most once; the storage of `set()` is created on the first `set()`.
  */
 export class Context<P extends string = string> {
   #url: URL | undefined
   #body: Promise<unknown> | undefined
+  #values: Map<ContextKey<unknown>, unknown> | undefined
 
   constructor(
     readonly req: Request,
     readonly params: ContextParams<P>,
     readonly route: RouteInfo
   ) {}
+
+  /** Attaches a value to this request, for the guards, interceptors and handler that follow. */
+  set<T>(key: ContextKey<T>, value: T): void {
+    this.#values ??= new Map()
+    this.#values.set(key, value)
+  }
+
+  /**
+   * Value attached to this request under `key`, or its default. Throws if
+   * nothing was set and the key has no default: a guard is missing on the route.
+   */
+  get<T>(key: ContextKey<T>): T {
+    if (this.#values?.has(key) === true) {
+      return this.#values.get(key) as T
+    }
+
+    if (key.defaultValue === undefined) {
+      throw new Error(
+        `${key.toString()} is not set for ${this.route.controller.name}.${this.route.handler}: ` +
+          'is the guard or interceptor that sets it applied to this route?'
+      )
+    }
+
+    const value = key.defaultValue()
+
+    this.set(key, value)
+
+    return value
+  }
+
+  /** `true` if a value was set under `key` for this request. */
+  has(key: ContextKey<unknown>): boolean {
+    return this.#values?.has(key) === true
+  }
 
   /**
    * Custom metadata of the route, the method's value over the class's.
