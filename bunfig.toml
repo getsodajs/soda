@@ -1,0 +1,3 @@
+[test]
+# The project template has its own tests, run against the generated project.
+pathIgnorePatterns = ["packages/*/template/**"]

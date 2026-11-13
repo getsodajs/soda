@@ -1,0 +1,37 @@
+{
+  "name": "create-soda",
+  "version": "0.1.0",
+  "description": "Create a Soda project: bun create soda my-app",
+  "keywords": [
+    "soda",
+    "bun",
+    "create",
+    "scaffold",
+    "template"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getsodajs/soda.git",
+    "directory": "packages/create-soda"
+  },
+  "homepage": "https://github.com/getsodajs/soda/tree/main/packages/create-soda#readme",
+  "bugs": {
+    "url": "https://github.com/getsodajs/soda/issues"
+  },
+  "type": "module",
+  "bin": {
+    "create-soda": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "template",
+    "core-version.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && bun scripts/write-core-version.ts"
+  }
+}

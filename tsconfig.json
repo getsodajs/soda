@@ -26,4 +26,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
   },
+  "exclude": ["node_modules", "packages/*/dist", "packages/*/template"]
 }
