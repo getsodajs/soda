@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["@stylistic/eslint-plugin"],
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "unicorn/no-array-for-each": "error",
+    "@stylistic/padding-line-between-statements": [
+      "error",
+      { "blankLine": "always", "prev": ["const", "let"], "next": "*" },
+      { "blankLine": "any", "prev": ["const", "let"], "next": ["const", "let"] },
+      { "blankLine": "always", "prev": "*", "next": "block-like" },
+      { "blankLine": "always", "prev": "block-like", "next": "*" },
+      { "blankLine": "always", "prev": "*", "next": ["return", "throw"] },
+      { "blankLine": "any", "prev": "export", "next": "*" },
+      { "blankLine": "any", "prev": "*", "next": "export" }
+    ]
+  },
+  "ignorePatterns": ["node_modules"]
+}

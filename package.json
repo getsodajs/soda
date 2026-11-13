@@ -3,10 +3,14 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "typecheck": "bun check"
+    "typecheck": "bun check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@stylistic/eslint-plugin": "5.10.0",
+    "@types/bun": "latest",
+    "oxlint": "1.93.0"
   },
   "peerDependencies": {
     "typescript": "^7"
