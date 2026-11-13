@@ -11,14 +11,14 @@
  */
 
 import { afterAll, describe, expect, it } from 'bun:test'
-import { compileRoutes } from './compiler'
-import { decodeComponent } from './decode'
-import { RouteError } from './errors'
-import { expandOptional, parsePath } from './path'
-import type { Segment } from './path'
-import { TestServer, createRandom, definitionsOf, pick, ROUTE_HEADER } from './testing'
-import type { Table } from './testing'
-import type { Params } from './types'
+import { compileRoutes } from './compiler.ts'
+import { decodeComponent } from './decode.ts'
+import { RouteError } from './errors.ts'
+import { expandOptional, parsePath } from './path.ts'
+import type { Segment } from './path.ts'
+import { TestServer, createRandom, definitionsOf, pick, ROUTE_HEADER } from './testing.ts'
+import type { Table } from './testing.ts'
+import type { Params } from './types.ts'
 
 const server = new TestServer()
 

@@ -12,14 +12,14 @@
  * enhancers is the bare handler call.
  */
 
-import type { ClassToken, Constructor } from '../di'
-import type { Handler } from '../routing'
-import { isThenable } from '../utils/promise'
-import { Context } from './context'
-import type { RouteInfo } from './context'
-import { getCaughtExceptions } from './enhancers'
-import type { CallHandler, CanActivate, ExceptionFilter, FilterLike, Guard, Interceptor, InterceptorLike } from './enhancers'
-import { errorResponse, ForbiddenException } from './exceptions'
+import type { ClassToken, Constructor } from '../di/index.ts'
+import type { Handler } from '../routing/index.ts'
+import { isThenable } from '../utils/promise.ts'
+import { Context } from './context.ts'
+import type { RouteInfo } from './context.ts'
+import { getCaughtExceptions } from './enhancers.ts'
+import type { CallHandler, CanActivate, ExceptionFilter, FilterLike, Guard, Interceptor, InterceptorLike } from './enhancers.ts'
+import { errorResponse, ForbiddenException } from './exceptions.ts'
 
 type GuardStep = (ctx: Context) => unknown
 type InterceptorStep = (ctx: Context, next: CallHandler) => unknown

@@ -11,9 +11,9 @@
  * ```
  */
 
-import { BadRequestException } from './exceptions'
-import { isStandardSchema, validateSync } from './schema'
-import type { InferOutput, StandardSchemaV1 } from './schema'
+import { BadRequestException } from './exceptions.ts'
+import { isStandardSchema, validateSync } from './schema.ts'
+import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 
 /**
  * Turns a raw string (`undefined` when absent) into a value, or throws an `HttpException`.

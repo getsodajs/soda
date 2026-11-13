@@ -16,19 +16,19 @@
  * returned, every singleton exists.
  */
 
-import { isThenable } from '../utils/promise'
-import { runInContext } from './context'
-import type { InjectionContext } from './context'
-import type { ModuleClass, ModuleImport } from './decorators'
-import { DiError } from './errors'
-import { buildGraph } from './graph'
-import type { ModuleGraph, ModuleNode, ProviderNode } from './graph'
-import { destroyAll, initializeAll } from './lifecycle'
-import type { Provider, ProviderDefinition } from './provider'
-import { tokenName } from './token'
-import type { Constructor, Token } from './token'
-import { chainOf, ownersOf } from './utils'
-import { visibleProviders } from './visibility'
+import { isThenable } from '../utils/promise.ts'
+import { runInContext } from './context.ts'
+import type { InjectionContext } from './context.ts'
+import type { ModuleClass, ModuleImport } from './decorators.ts'
+import { DiError } from './errors.ts'
+import { buildGraph } from './graph.ts'
+import type { ModuleGraph, ModuleNode, ProviderNode } from './graph.ts'
+import { destroyAll, initializeAll } from './lifecycle.ts'
+import type { Provider, ProviderDefinition } from './provider.ts'
+import { tokenName } from './token.ts'
+import type { Constructor, Token } from './token.ts'
+import { chainOf, ownersOf } from './utils.ts'
+import { visibleProviders } from './visibility.ts'
 
 /**
  * Options of `createContainer`.

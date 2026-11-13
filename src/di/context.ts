@@ -7,9 +7,9 @@
  * the constructor can call `inject()`, nothing else can.
  */
 
-import { DiError } from './errors'
-import { describeInvalidToken, isToken, tokenName } from './token'
-import type { Token } from './token'
+import { DiError } from './errors.ts'
+import { describeInvalidToken, isToken, tokenName } from './token.ts'
+import type { Token } from './token.ts'
 
 /**
  * Context of the class being created: resolves tokens from its module.

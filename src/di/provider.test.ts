@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
-import { inject } from './context'
-import { optional, provide } from './provider'
-import { expectDiError } from './testing'
-import { InjectionToken } from './token'
+import { inject } from './context.ts'
+import { optional, provide } from './provider.ts'
+import { expectDiError } from './testing.ts'
+import { InjectionToken } from './token.ts'
 
 interface Config {
   readonly url: string

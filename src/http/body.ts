@@ -15,7 +15,7 @@
  *    (`"constructor": "Ford"`) is legitimate and kept.
  */
 
-import { BadRequestException, UnsupportedMediaTypeException } from './exceptions'
+import { BadRequestException, UnsupportedMediaTypeException } from './exceptions.ts'
 
 const SUSPECT_PROTO =
   /"(?:_|\\u005[Ff])(?:_|\\u005[Ff])(?:p|\\u0070)(?:r|\\u0072)(?:o|\\u006[Ff])(?:t|\\u0074)(?:o|\\u006[Ff])(?:_|\\u005[Ff])(?:_|\\u005[Ff])"\s*:/

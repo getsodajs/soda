@@ -8,8 +8,8 @@
  * Run: bun bench/routing.bench.ts
  */
 
-import { compileRoutes } from '../src/routing'
-import type { Handler, Params } from '../src/routing'
+import { compileRoutes } from '../src/routing/index.ts'
+import type { Handler, Params } from '../src/routing/index.ts'
 
 const RESPONSE = new Response('ok')
 let sink = 0

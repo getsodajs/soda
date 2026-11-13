@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, it } from 'bun:test'
-import { compileRoutes } from './compiler'
-import { RouteError } from './errors'
-import type { RouteErrorCode } from './errors'
-import { TestServer, definitionsOf } from './testing'
-import type { Table } from './testing'
+import { compileRoutes } from './compiler.ts'
+import { RouteError } from './errors.ts'
+import type { RouteErrorCode } from './errors.ts'
+import { TestServer, definitionsOf } from './testing.ts'
+import type { Table } from './testing.ts'
 
 const server = new TestServer()
 

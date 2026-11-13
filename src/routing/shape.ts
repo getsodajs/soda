@@ -15,7 +15,7 @@
  * backtracking. `compareShapes` reproduces that order.
  */
 
-import type { Segment } from './path'
+import type { Segment } from './path.ts'
 
 /** `null` is a parameter slot. */
 export type Token = string | null

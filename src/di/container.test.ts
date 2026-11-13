@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import { createContainer } from './container'
-import { inject } from './context'
-import { Injectable, Module } from './decorators'
-import type { DynamicModule } from './decorators'
-import type { OnDestroy, OnInit } from './lifecycle'
-import { optional, provide } from './provider'
-import { expectDiError } from './testing'
-import { InjectionToken } from './token'
+import { createContainer } from './container.ts'
+import { inject } from './context.ts'
+import { Injectable, Module } from './decorators.ts'
+import type { DynamicModule } from './decorators.ts'
+import type { OnDestroy, OnInit } from './lifecycle.ts'
+import { optional, provide } from './provider.ts'
+import { expectDiError } from './testing.ts'
+import { InjectionToken } from './token.ts'
 
 describe('injection', () => {
   it('injects into fields, private fields and the constructor', async () => {

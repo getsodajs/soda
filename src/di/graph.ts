@@ -6,16 +6,16 @@
  * can see is decided in `visibility.ts`.
  */
 
-import { nameOf } from '../utils/name'
-import { getInjectableOptions, getModuleDefinition } from './decorators'
-import type { DynamicModule, ModuleClass, ModuleDefinition, ModuleImport } from './decorators'
-import { DiError } from './errors'
-import { assertConstructible, isProviderRecord } from './provider'
-import type { Provider, ProviderDefinition, Scope } from './provider'
-import { describeInvalidToken, isToken, tokenName } from './token'
-import type { Token } from './token'
-import { undefinedEntry } from './utils'
-import { exportedProviders } from './visibility'
+import { nameOf } from '../utils/name.ts'
+import { getInjectableOptions, getModuleDefinition } from './decorators.ts'
+import type { DynamicModule, ModuleClass, ModuleDefinition, ModuleImport } from './decorators.ts'
+import { DiError } from './errors.ts'
+import { assertConstructible, isProviderRecord } from './provider.ts'
+import type { Provider, ProviderDefinition, Scope } from './provider.ts'
+import { describeInvalidToken, isToken, tokenName } from './token.ts'
+import type { Token } from './token.ts'
+import { undefinedEntry } from './utils.ts'
+import { exportedProviders } from './visibility.ts'
 
 /**
  * Lifecycle of a provider node while the container creates it.

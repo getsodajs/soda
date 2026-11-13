@@ -10,8 +10,8 @@
  * hostile payload with thousands of issues cannot blow up the response.
  */
 
-import { isThenable } from '../utils/promise'
-import { BadRequestException } from './exceptions'
+import { isThenable } from '../utils/promise.ts'
+import { BadRequestException } from './exceptions.ts'
 
 /** The Standard Schema interface, version 1. */
 export interface StandardSchemaV1<Input = unknown, Output = Input> {

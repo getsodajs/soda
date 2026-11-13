@@ -18,9 +18,9 @@
  * object in a heterogeneous array could not.
  */
 
-import { DiError } from './errors'
-import { describeInvalidToken, isToken, tokenName } from './token'
-import type { Constructor, Token, TokenValue } from './token'
+import { DiError } from './errors.ts'
+import { describeInvalidToken, isToken, tokenName } from './token.ts'
+import type { Constructor, Token, TokenValue } from './token.ts'
 
 /**
  * Lifetime of a created value.

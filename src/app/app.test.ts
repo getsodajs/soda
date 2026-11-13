@@ -2,11 +2,11 @@ import { afterAll, describe, expect, it } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { inject, Module } from '../di'
-import type { OnDestroy, OnInit } from '../di'
-import { Controller, Get, UseGuards } from '../http'
-import type { CanActivate } from '../http'
-import { createApp } from './app'
+import { inject, Module } from '../di/index.ts'
+import type { OnDestroy, OnInit } from '../di/index.ts'
+import { Controller, Get, UseGuards } from '../http/index.ts'
+import type { CanActivate } from '../http/index.ts'
+import { createApp } from './app.ts'
 
 const SOURCE = join(import.meta.dir, '..')
 const directory = await mkdtemp(join(tmpdir(), 'soda-app-'))

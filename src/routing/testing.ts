@@ -6,8 +6,8 @@
  * the behaviour of Bun's native router plus the compiled dispatchers, not a model of it.
  */
 
-import { compileRoutes } from './compiler'
-import type { CompiledRoutes, CompileOptions, Params, RouteDefinition } from './types'
+import { compileRoutes } from './compiler.ts'
+import type { CompiledRoutes, CompileOptions, Params, RouteDefinition } from './types.ts'
 
 /** Header carrying `{ route, params }` of the route that answered, readable on HEAD too. */
 export const ROUTE_HEADER = 'x-route'

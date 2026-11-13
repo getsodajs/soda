@@ -3,14 +3,14 @@
  * Request context passed to route handlers.
  */
 
-import type { Constructor } from '../di'
-import { readJsonBody } from './body'
-import type { MetadataDecorator } from './enhancers'
-import { applyParser } from './parsers'
-import type { Parsed, ValueParser } from './parsers'
-import { validate } from './schema'
-import type { InferOutput, StandardSchemaV1 } from './schema'
-import type { AnyParams, PathParams } from './types'
+import type { Constructor } from '../di/index.ts'
+import { readJsonBody } from './body.ts'
+import type { MetadataDecorator } from './enhancers.ts'
+import { applyParser } from './parsers.ts'
+import type { Parsed, ValueParser } from './parsers.ts'
+import { validate } from './schema.ts'
+import type { InferOutput, StandardSchemaV1 } from './schema.ts'
+import type { AnyParams, PathParams } from './types.ts'
 
 /**
  * Parameters of a context: typed from the route path, plus untyped access to

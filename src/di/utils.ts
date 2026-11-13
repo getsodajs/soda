@@ -3,9 +3,9 @@
  * Helpers shared by the container and the module graph.
  */
 
-import type { ProviderNode } from './graph'
-import { tokenName } from './token'
-import type { Token } from './token'
+import type { ProviderNode } from './graph.ts'
+import { tokenName } from './token.ts'
+import type { Token } from './token.ts'
 
 /**
  * Resolution path ending with `token`, for error messages.

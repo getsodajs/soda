@@ -16,9 +16,9 @@
  * called by the framework before the method instead of by the method itself.
  */
 
-import type { Context, ParamNameOf } from './context'
-import type { Parsed, ValueParser } from './parsers'
-import type { InferOutput, StandardSchemaV1 } from './schema'
+import type { Context, ParamNameOf } from './context.ts'
+import type { Parsed, ValueParser } from './parsers.ts'
+import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 
 export type ArgumentKind = 'param' | 'query' | 'header' | 'body' | 'context'
 

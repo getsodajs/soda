@@ -19,14 +19,14 @@
  * are being destroyed; here they cannot.
  */
 
-import { createContainer } from '../di'
-import type { Container, ContainerOptions, ModuleImport } from '../di'
-import { destroyAll, initializeAll } from '../di/lifecycle'
-import { buildRoutes } from '../http'
-import type { ControllerRoutesOptions } from '../http'
-import { compileRoutes } from '../routing'
-import type { CompiledRoutes, CompileOptions } from '../routing'
-import { release, takeOver } from './hot'
+import { createContainer } from '../di/index.ts'
+import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
+import { destroyAll, initializeAll } from '../di/lifecycle.ts'
+import { buildRoutes } from '../http/index.ts'
+import type { ControllerRoutesOptions } from '../http/index.ts'
+import { compileRoutes } from '../routing/index.ts'
+import type { CompiledRoutes, CompileOptions } from '../routing/index.ts'
+import { release, takeOver } from './hot.ts'
 
 /**
  * Options of `createApp`.

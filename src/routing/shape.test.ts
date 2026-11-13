@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { parsePath } from './path'
-import { compareShapes, containsShape, intersectShapes, shapeId, shapeKey, shapeOf } from './shape'
-import type { Shape } from './shape'
+import { parsePath } from './path.ts'
+import { compareShapes, containsShape, intersectShapes, shapeId, shapeKey, shapeOf } from './shape.ts'
+import type { Shape } from './shape.ts'
 
 const shape = (path: string): Shape => shapeOf(parsePath(path))
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { RouteError } from './errors'
-import { expandOptional, parsePath } from './path'
-import type { Segment } from './path'
+import { RouteError } from './errors.ts'
+import { expandOptional, parsePath } from './path.ts'
+import type { Segment } from './path.ts'
 
 const format = (segments: readonly Segment[]): string => {
   let path = ''

@@ -11,20 +11,20 @@
  * ```
  */
 
-import type { Container, ControllerEntry, ModuleClass } from '../di'
-import type { RouteDefinition } from '../routing'
-import { parsePath } from '../routing/path'
-import { isThenable } from '../utils/promise'
-import type { Argument } from './arguments'
-import type { Context, RouteInfo } from './context'
-import { getControllerPath, getHandlerMetadata } from './decorators'
-import type { HandlerMetadata, RouteMetadata } from './decorators'
-import { getClassEnhancers, getMethodEnhancers } from './enhancers'
-import type { FilterLike, Guard, InterceptorLike } from './enhancers'
-import { ControllerError } from './errors'
-import { createEnhancerResolver, createPipeline } from './pipeline'
-import type { EnhancerResolver } from './pipeline'
-import { createResponder } from './response'
+import type { Container, ControllerEntry, ModuleClass } from '../di/index.ts'
+import type { RouteDefinition } from '../routing/index.ts'
+import { parsePath } from '../routing/path.ts'
+import { isThenable } from '../utils/promise.ts'
+import type { Argument } from './arguments.ts'
+import type { Context, RouteInfo } from './context.ts'
+import { getControllerPath, getHandlerMetadata } from './decorators.ts'
+import type { HandlerMetadata, RouteMetadata } from './decorators.ts'
+import { getClassEnhancers, getMethodEnhancers } from './enhancers.ts'
+import type { FilterLike, Guard, InterceptorLike } from './enhancers.ts'
+import { ControllerError } from './errors.ts'
+import { createEnhancerResolver, createPipeline } from './pipeline.ts'
+import type { EnhancerResolver } from './pipeline.ts'
+import { createResponder } from './response.ts'
 
 /**
  * Options of `controllerRoutes`.

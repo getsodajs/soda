@@ -3,7 +3,7 @@
  * Route path syntax: parsing, validation, normalisation and optional-parameter expansion.
  */
 
-import { RouteError } from './errors'
+import { RouteError } from './errors.ts'
 
 /**
  * One segment of a parsed route path.

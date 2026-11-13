@@ -6,8 +6,8 @@
  * `Symbol.metadata` polyfill, nothing written onto user classes.
  */
 
-import type { Provider, Scope } from './provider'
-import type { Constructor, Token } from './token'
+import type { Provider, Scope } from './provider.ts'
+import type { Constructor, Token } from './token.ts'
 
 /**
  * Class decorated with `@Module`.

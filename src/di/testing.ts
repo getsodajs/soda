@@ -4,8 +4,8 @@
  */
 
 import { expect } from 'bun:test'
-import { DiError } from './errors'
-import type { DiErrorCode } from './errors'
+import { DiError } from './errors.ts'
+import type { DiErrorCode } from './errors.ts'
 
 /**
  * Asserts that `run` throws or rejects with a `DiError` of `code` whose message matches `message`.

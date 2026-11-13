@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'bun:test'
-import { decodeComponent } from './decode'
-import { createRandom, pick } from './testing'
+import { decodeComponent } from './decode.ts'
+import { createRandom, pick } from './testing.ts'
 
 describe('decodeComponent', () => {
   it.each([

@@ -16,17 +16,17 @@
  * 4. Each native route gets a dispatcher holding only its candidates.
  */
 
-import { createNullObject } from '../utils/object'
-import { decodeComponent } from './decode'
-import { createDispatcher, createParamsBuilder } from './dispatch'
-import type { Candidate, ValueSource, WildcardSpec } from './dispatch'
-import { RouteError } from './errors'
-import { expandOptional, parsePath } from './path'
-import type { Segment } from './path'
-import { compareShapes, containsShape, intersectShapes, shapeId, shapeKey, shapeOf } from './shape'
-import type { Shape } from './shape'
-import { MAX_NATIVE_ROUTES, METHOD_ALL } from './types'
-import type { CompiledRoutes, CompileOptions, Handler, NativeHandler, Params, RouteDefinition } from './types'
+import { createNullObject } from '../utils/object.ts'
+import { decodeComponent } from './decode.ts'
+import { createDispatcher, createParamsBuilder } from './dispatch.ts'
+import type { Candidate, ValueSource, WildcardSpec } from './dispatch.ts'
+import { RouteError } from './errors.ts'
+import { expandOptional, parsePath } from './path.ts'
+import type { Segment } from './path.ts'
+import { compareShapes, containsShape, intersectShapes, shapeId, shapeKey, shapeOf } from './shape.ts'
+import type { Shape } from './shape.ts'
+import { MAX_NATIVE_ROUTES, METHOD_ALL } from './types.ts'
+import type { CompiledRoutes, CompileOptions, Handler, NativeHandler, Params, RouteDefinition } from './types.ts'
 
 interface Route {
   readonly method: string

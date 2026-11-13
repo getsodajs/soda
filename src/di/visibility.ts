@@ -19,8 +19,8 @@
  * query handles diamonds and cycles between modules.
  */
 
-import type { ModuleNode, ProviderNode } from './graph'
-import type { Token } from './token'
+import type { ModuleNode, ProviderNode } from './graph.ts'
+import type { Token } from './token.ts'
 
 const collectFromModule = (
   node: ModuleNode,

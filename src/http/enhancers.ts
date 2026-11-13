@@ -26,10 +26,10 @@
  * wrap all of it and are tried the other way round: method, class, global.
  */
 
-import type { ClassToken, Constructor } from '../di'
-import { nameOf } from '../utils/name'
-import type { Context } from './context'
-import { ControllerError } from './errors'
+import type { ClassToken, Constructor } from '../di/index.ts'
+import { nameOf } from '../utils/name.ts'
+import type { Context } from './context.ts'
+import { ControllerError } from './errors.ts'
 
 /** Class guard. Like Nest's `CanActivate`. */
 export interface CanActivate {

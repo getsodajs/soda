@@ -11,9 +11,9 @@
  * with `req.params` as produced by Bun. No allocation, no URL parsing.
  */
 
-import { createNullObject } from '../utils/object'
-import { decodeComponent } from './decode'
-import type { Handler, NativeHandler, Params } from './types'
+import { createNullObject } from '../utils/object.ts'
+import { decodeComponent } from './decode.ts'
+import type { Handler, NativeHandler, Params } from './types.ts'
 
 /**
  * How a candidate reads a value: from `req.params[key]`, or a constant known at

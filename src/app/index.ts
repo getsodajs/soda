@@ -3,5 +3,5 @@
  * The application: container, routes and server, started and stopped together.
  */
 
-export { createApp } from './app'
-export type { App, AppOptions, ListenOptions } from './app'
+export { createApp } from './app.ts'
+export type { App, AppOptions, ListenOptions } from './app.ts'

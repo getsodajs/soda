@@ -3,11 +3,11 @@
  * HTTP layer for Soda: controllers, route decorators, request context, validation, exceptions.
  */
 
-export { body, context, header, param, query } from './arguments'
-export type { Argument, ArgumentFor, ArgumentKind, ArgumentValues } from './arguments'
-export { Context } from './context'
-export type { ContextParams, ParamNameOf } from './context'
-export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Route } from './decorators'
+export { body, context, header, param, query } from './arguments.ts'
+export type { Argument, ArgumentFor, ArgumentKind, ArgumentValues } from './arguments.ts'
+export { Context } from './context.ts'
+export type { ContextParams, ParamNameOf } from './context.ts'
+export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Route } from './decorators.ts'
 export type {
   ArgumentsRouteDecorator,
   MethodMetadataDecorator,
@@ -15,9 +15,9 @@ export type {
   RouteDecorator,
   RouteDecoratorFactory,
   RouteHandlerMethod,
-} from './decorators'
-export { ControllerError } from './errors'
-export type { ControllerErrorCode } from './errors'
+} from './decorators.ts'
+export { ControllerError } from './errors.ts'
+export type { ControllerErrorCode } from './errors.ts'
 export {
   BadRequestException,
   ConflictException,
@@ -31,15 +31,15 @@ export {
   UnauthorizedException,
   UnprocessableEntityException,
   UnsupportedMediaTypeException,
-} from './exceptions'
-export type { HttpExceptionBody, HttpExceptionOptions } from './exceptions'
-export { boolean, int, number, uuid } from './parsers'
-export type { Parsed, Parser, ParserOptions, ValueParser } from './parsers'
-export { buildRoutes, controllerRoutes } from './routes'
-export type { BuiltRoutes, ControllerRoutesOptions } from './routes'
-export type { InferOutput, StandardSchemaV1 } from './schema'
-export type { AnyParams, PathParams } from './types'
-export { Catch, createDecorator, UseFilters, UseGuards, UseInterceptors } from './enhancers'
+} from './exceptions.ts'
+export type { HttpExceptionBody, HttpExceptionOptions } from './exceptions.ts'
+export { boolean, int, number, uuid } from './parsers.ts'
+export type { Parsed, Parser, ParserOptions, ValueParser } from './parsers.ts'
+export { buildRoutes, controllerRoutes } from './routes.ts'
+export type { BuiltRoutes, ControllerRoutesOptions } from './routes.ts'
+export type { InferOutput, StandardSchemaV1 } from './schema.ts'
+export type { AnyParams, PathParams } from './types.ts'
+export { Catch, createDecorator, UseFilters, UseGuards, UseInterceptors } from './enhancers.ts'
 export type {
   CallHandler,
   CanActivate,
@@ -54,5 +54,5 @@ export type {
   InterceptorFunction,
   InterceptorLike,
   MetadataDecorator,
-} from './enhancers'
-export type { RouteInfo } from './context'
+} from './enhancers.ts'
+export type { RouteInfo } from './context.ts'

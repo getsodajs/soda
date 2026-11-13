@@ -28,10 +28,10 @@
  * ```
  */
 
-import type { Constructor } from '../di'
-import type { Argument, ArgumentFor, ArgumentValues } from './arguments'
-import type { Context } from './context'
-import { ControllerError } from './errors'
+import type { Constructor } from '../di/index.ts'
+import type { Argument, ArgumentFor, ArgumentValues } from './arguments.ts'
+import type { Context } from './context.ts'
+import { ControllerError } from './errors.ts'
 
 /**
  * Route declared on a method.
