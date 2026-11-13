@@ -67,7 +67,8 @@ const OMITTED = 'Further validation errors were omitted'
 export const isStandardSchema = (value: unknown): value is StandardSchemaV1 =>
   typeof value === 'object' && value !== null && '~standard' in value
 
-const formatIssues = (issues: readonly StandardSchemaV1.Issue[], prefix: string): string[] => {
+/** Messages of `issues`, each with the path of its value under `prefix`. */
+export const formatIssues = (issues: readonly StandardSchemaV1.Issue[], prefix: string): string[] => {
   const messages: string[] = []
   let remaining = MAX_MESSAGES_LENGTH
 

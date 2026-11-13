@@ -72,6 +72,29 @@ app.enableShutdownSignals()
 await app.listen(3000)
 ```
 
+## Configuration
+
+A configuration is a schema over the environment (Bun loads `.env` files into it), validated when the application starts and injected with its type:
+
+```ts
+import { ConfigModule, defineConfig } from '@getsoda/core'
+import { z } from 'zod'
+
+export const AppConfig = defineConfig('app', z.object({
+  PORT: z.coerce.number().default(3000),
+  JWT_SECRET: z.string().min(32),
+}))
+
+@Module({ imports: [ConfigModule.forRoot({ load: [AppConfig], global: true })] })
+class AppModule {}
+
+class AuthService {
+  readonly #config = inject(AppConfig) // { PORT: number; JWT_SECRET: string }
+}
+```
+
+An invalid environment stops the startup with every issue listed. `defineConfig(name, schema, (env) => ({ ... }))` builds nested configurations; tests replace one with `overrides: [provide(AppConfig, { useValue })]`.
+
 ## Cookies
 
 `ctx.cookies` is Bun's `CookieMap` for the request: what you set or delete is sent with the response, whatever the response is. Signed cookies can be read by the client but not forged:
