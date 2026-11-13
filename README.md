@@ -14,7 +14,7 @@ A class-based web framework for [Bun](https://bun.sh): modules, dependency injec
 ## Install
 
 ```bash
-bun add @soda/core
+bun add @getsoda/core
 ```
 
 Requires Bun 1.4 or later. No TypeScript flags are needed for decorators.
@@ -22,8 +22,8 @@ Requires Bun 1.4 or later. No TypeScript flags are needed for decorators.
 ## Quick start
 
 ```ts
-import { Controller, Get, Module, Post, body, createApp, inject, int, param } from '@soda/core'
-import type { Context } from '@soda/core'
+import { Controller, Get, Module, Post, body, createApp, inject, int, param } from '@getsoda/core'
+import type { Context } from '@getsoda/core'
 import { z } from 'zod'
 
 const CreateUser = z.object({ name: z.string().min(1) })

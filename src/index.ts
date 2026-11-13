@@ -4,7 +4,7 @@
  * injection like Nest, standard TC39 decorators, and Bun's native router.
  *
  * ```ts
- * import { Context, Controller, Get, Module, createApp, inject } from '@soda/core'
+ * import { Context, Controller, Get, Module, createApp, inject } from '@getsoda/core'
  *
  * class Greeter {
  *   greet(name: string) {
