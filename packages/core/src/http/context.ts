@@ -5,12 +5,12 @@
 
 import type { Constructor } from '../di/index.ts'
 import { readFormBody, readJsonBody } from './body.ts'
-import type { FormFields } from './body.ts'
+import type { FormFields, FormLimits } from './body.ts'
 import type { ContextKey } from './context-key.ts'
 import type { MetadataDecorator } from './enhancers.ts'
 import { applyParser } from './parsers.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
-import { validate } from './schema.ts'
+import { isStandardSchema, validate } from './schema.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 import type { AnyParams, PathParams } from './types.ts'
 
@@ -179,13 +179,16 @@ export class Context<P extends string = string> {
    * validated by `schema` when given. `415` for another content type.
    * Repeated fields and fields named `name[]` are arrays; files are `File`s
    * whose `type` is what the client declared, not checked against the content.
+   * `limits` bound the body, the files and the fields: `413` past them.
    */
-  form(): Promise<FormFields>
-  form<S extends StandardSchemaV1>(schema: S): Promise<InferOutput<S>>
-  async form(schema?: StandardSchemaV1): Promise<unknown> {
-    const value = await this.#read('form', readFormBody)
+  form(limits?: FormLimits): Promise<FormFields>
+  form<S extends StandardSchemaV1>(schema: S, limits?: FormLimits): Promise<InferOutput<S>>
+  async form(schemaOrLimits?: StandardSchemaV1 | FormLimits, limits?: FormLimits): Promise<unknown> {
+    if (isStandardSchema(schemaOrLimits)) {
+      return validate(schemaOrLimits, await this.#read('form', (req) => readFormBody(req, limits)), '')
+    }
 
-    return schema === undefined ? value : validate(schema, value, '')
+    return this.#read('form', (req) => readFormBody(req, schemaOrLimits))
   }
 
   /** Reads the body once; reading it again in another format is a programming error. */

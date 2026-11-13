@@ -16,10 +16,11 @@
  * called by the framework before the method instead of by the method itself.
  */
 
-import type { FormFields } from './body.ts'
+import type { FormFields, FormLimits } from './body.ts'
 import type { ContextKey } from './context-key.ts'
 import type { Context, ParamNameOf } from './context.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
+import { isStandardSchema } from './schema.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 
 export type ArgumentKind = 'param' | 'query' | 'header' | 'cookie' | 'body' | 'context' | 'value'
@@ -120,13 +121,13 @@ export const value = <T>(key: ContextKey<T>): Argument<T, 'value'> => ({
   read: (ctx) => ctx.get(key),
 })
 
-/** Form body, validated by `schema`. Like `@Body()` on a form, or Nest's file interceptors for multipart. */
-export function form(): Argument<FormFields, 'body'>
-export function form<S extends StandardSchemaV1>(schema: S): Argument<InferOutput<S>, 'body'>
-export function form(schema?: StandardSchemaV1): Argument<unknown, 'body'> {
+/** Form body, validated by `schema` when given, within `limits`. Like `@Body()` on a form, or Nest's file interceptors with multer limits. */
+export function form(limits?: FormLimits): Argument<FormFields, 'body'>
+export function form<S extends StandardSchemaV1>(schema: S, limits?: FormLimits): Argument<InferOutput<S>, 'body'>
+export function form(schemaOrLimits?: StandardSchemaV1 | FormLimits, limits?: FormLimits): Argument<unknown, 'body'> {
   return {
     kind: 'body',
     name: '',
-    read: schema === undefined ? (ctx) => ctx.form() : (ctx) => ctx.form(schema),
+    read: isStandardSchema(schemaOrLimits) ? (ctx) => ctx.form(schemaOrLimits, limits) : (ctx) => ctx.form(schemaOrLimits),
   }
 }

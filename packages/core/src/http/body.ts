@@ -15,7 +15,7 @@
  *    (`"constructor": "Ford"`) is legitimate and kept.
  */
 
-import { BadRequestException, UnsupportedMediaTypeException } from './exceptions.ts'
+import { BadRequestException, PayloadTooLargeException, UnsupportedMediaTypeException } from './exceptions.ts'
 
 const SUSPECT_PROTO =
   /"(?:_|\\u005[Ff])(?:_|\\u005[Ff])(?:p|\\u0070)(?:r|\\u0072)(?:o|\\u006[Ff])(?:t|\\u0074)(?:o|\\u006[Ff])(?:_|\\u005[Ff])(?:_|\\u005[Ff])"\s*:/
@@ -83,6 +83,9 @@ export const readJsonBody = async (req: Request): Promise<unknown> => {
 const FORM_TYPE = /^(?:multipart\/form-data|application\/x-www-form-urlencoded)(?:\s*;|$)/i
 const ARRAY_SUFFIX = '[]'
 
+/** Parsed form data, as `Request.formData()` gives it. */
+type FormBody = Awaited<ReturnType<Request['formData']>>
+
 /** A form value: text, or a file of a multipart body. */
 export type FormValue = string | File
 
@@ -98,7 +101,7 @@ export type FormFields = Record<string, FormValue | FormValue[]>
  * 'name=Ann'     => { name: 'Ann' }
  * ```
  */
-const toFields = (data: Awaited<ReturnType<Request['formData']>>): FormFields => {
+const toFields = (data: FormBody): FormFields => {
   const fields: FormFields = Object.create(null)
 
   for (const [rawKey, value] of data) {
@@ -119,24 +122,101 @@ const toFields = (data: Awaited<ReturnType<Request['formData']>>): FormFields =>
 }
 
 /**
+ * Limits of a form body, beyond the server's `maxRequestBodySize`; each one
+ * exceeded is a `413`. Like the `limits` of multer and `@fastify/multipart`.
+ */
+export interface FormLimits {
+  /** Bytes of the whole body, refused as soon as they are exceeded, before the body is read entirely. */
+  readonly maxBodySize?: number
+  /** Bytes of each file. */
+  readonly maxFileSize?: number
+  /** Number of files. */
+  readonly maxFiles?: number
+  /** Number of fields, files included. */
+  readonly maxFields?: number
+}
+
+/** The body, read up to `max` bytes: `413` as soon as it is larger. */
+const readUpTo = async (req: Request, max: number): Promise<Uint8Array<ArrayBuffer>> => {
+  if (Number(req.headers.get('content-length') ?? 0) > max) {
+    throw new PayloadTooLargeException(`Request body is larger than ${max} bytes`)
+  }
+
+  if (req.body === null) {
+    return new Uint8Array()
+  }
+
+  const chunks: Uint8Array[] = []
+  let size = 0
+
+  for await (const chunk of req.body) {
+    size += chunk.byteLength
+
+    if (size > max) {
+      throw new PayloadTooLargeException(`Request body is larger than ${max} bytes`)
+    }
+
+    chunks.push(chunk)
+  }
+
+  return Buffer.concat(chunks)
+}
+
+/** `413` for the first limit the form exceeds. */
+const checkLimits = (data: FormBody, limits: FormLimits): void => {
+  const { maxFileSize = Infinity, maxFiles = Infinity, maxFields = Infinity } = limits
+  let fields = 0
+  let files = 0
+
+  for (const [name, value] of data) {
+    fields++
+
+    if (fields > maxFields) {
+      throw new PayloadTooLargeException(`Form has more than ${maxFields} fields`)
+    }
+
+    if (typeof value !== 'string') {
+      files++
+
+      if (files > maxFiles) {
+        throw new PayloadTooLargeException(`Form has more than ${maxFiles} files`)
+      }
+
+      if (value.size > maxFileSize) {
+        throw new PayloadTooLargeException(`File "${name}" is larger than ${maxFileSize} bytes`)
+      }
+    }
+  }
+}
+
+/**
  * Reads a `multipart/form-data` or `application/x-www-form-urlencoded` body:
- * `415` for another content type, `400` for a malformed body.
+ * `415` for another content type, `400` for a malformed body, `413` past a limit.
  *
  * Kept apart from JSON on purpose: an HTML form on another site can post a form
  * without a CORS preflight, a JSON body cannot. A JSON endpoint must not accept forms.
  *
  * `File.type` is the type the client declared, not checked against the content.
  */
-export const readFormBody = async (req: Request): Promise<FormFields> => {
+export const readFormBody = async (req: Request, limits: FormLimits = {}): Promise<FormFields> => {
   const type = req.headers.get('content-type')
 
   if (type === null || !FORM_TYPE.test(type)) {
     throw new UnsupportedMediaTypeException(`Expected a form body, got ${type ?? 'no content type'}`)
   }
 
+  // Parsed from the bytes read so far, as only a whole body can be parsed.
+  const source =
+    limits.maxBodySize === undefined ? req : new Response(await readUpTo(req, limits.maxBodySize), { headers: { 'content-type': type } })
+  let data: FormBody
+
   try {
-    return toFields(await req.formData())
+    data = await source.formData()
   } catch (error) {
     throw new BadRequestException('Request body is not a valid form', { cause: error })
   }
+
+  checkLimits(data, limits)
+
+  return toFields(data)
 }

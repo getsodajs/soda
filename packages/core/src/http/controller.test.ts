@@ -10,6 +10,7 @@ import { HttpException, NotFoundException } from './exceptions.ts'
 import { int } from './parsers.ts'
 import { controllerRoutes } from './routes.ts'
 import type { ControllerRoutesOptions } from './routes.ts'
+import type { FormFields } from './body.ts'
 import type { StandardSchemaV1 } from './schema.ts'
 
 const server = Bun.serve({ port: 0, routes: {}, fetch: () => new Response(null, { status: 404 }) })
@@ -587,6 +588,16 @@ describe('forms', () => {
       return profile
     }
 
+    @Post('/limited', [form({ maxBodySize: 1024, maxFileSize: 4, maxFiles: 1, maxFields: 3 })])
+    limited(fields: FormFields): string[] {
+      return Object.keys(fields)
+    }
+
+    @Post('/limited-profile', [form(ProfileSchema, { maxFields: 2 })])
+    limitedProfile(profile: Profile): Profile {
+      return profile
+    }
+
     @Post('/json')
     json(ctx: Context): Promise<unknown> {
       return ctx.body()
@@ -634,6 +645,53 @@ describe('forms', () => {
 
     expect([valid.status, await valid.json()]).toEqual([201, { name: 'Cy', tags: ['a', 'b'] }])
     expect(invalid.status).toBe(400)
+  })
+
+  it('refuses forms past their limits with 413', async () => {
+    const request = await serve(AppModule)
+
+    const multipart = (fields: Record<string, string | File>) => {
+      const data = new FormData()
+
+      for (const [name, value] of Object.entries(fields)) {
+        data.append(name, value)
+      }
+
+      return { body: data }
+    }
+
+    const urlencoded = (body: string) => ({ body, headers: { 'content-type': 'application/x-www-form-urlencoded' } })
+    // Without Content-Length: the size is only known by reading, and reading stops past the limit.
+    const streamed = {
+      body: new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode('a=1&'.repeat(10)))
+        },
+      }),
+      duplex: 'half',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    } as RequestInit
+    const cases = [
+      [urlencoded('a=1&b=2'), 201, ['a', 'b']],
+      [multipart({ file: new File(['1234'], 'f') }), 201, ['file']],
+      [urlencoded(`a=${'x'.repeat(1024)}`), 413, 'Request body is larger than 1024 bytes'],
+      [streamed, 413, 'Request body is larger than 1024 bytes'],
+      [multipart({ file: new File(['12345'], 'f') }), 413, 'File "file" is larger than 4 bytes'],
+      [multipart({ a: new File(['1'], 'a'), b: new File(['2'], 'b') }), 413, 'Form has more than 1 files'],
+      [urlencoded('a=1&b=2&c=3&d=4'), 413, 'Form has more than 3 fields'],
+    ] as const
+
+    for (const [init, status, expected] of cases) {
+      const response = await request('POST', '/forms/limited', init)
+      const body = (await response.json()) as unknown
+
+      expect(response.status).toBe(status)
+      expect(status === 201 ? body : (body as { message: string }).message).toEqual(expected)
+    }
+
+    const profile = await request('POST', '/forms/limited-profile', urlencoded('name=Cy&tags[]=a&tags[]=b'))
+
+    expect(profile.status).toBe(413)
   })
 
   it('keeps JSON and forms apart: a JSON endpoint refuses forms, a form endpoint refuses JSON', async () => {
