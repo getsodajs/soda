@@ -4,9 +4,13 @@ Created with `create-soda`. Requires [Bun](https://bun.sh).
 
 ```bash
 bun install
-bun dev        # bun --hot: reloads on change
-bun test
+bun dev          # bun --hot: reloads on change
+bun debug        # the same, with the inspector
+bun test         # test:watch, test:cov
 bun typecheck
+bun lint         # oxlint; lint:fix
+bun run build    # bundles src/main.ts into dist/
+bun start:prod   # runs the bundle
 ```
 
 - `src/main.ts`: creates the application, CORS, graceful shutdown.

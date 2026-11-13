@@ -54,6 +54,7 @@ describe('create-soda', () => {
     expect(manifest.dependencies['@getsoda/core']).toBe(`^${core.version}`)
     expect(existsSync(join(root, '.gitignore'))).toBe(true)
     expect(existsSync(join(root, '_gitignore'))).toBe(false)
+    expect(existsSync(join(root, '.oxlintrc.json'))).toBe(true)
     expect(existsSync(join(root, 'src', 'app.controller.ts'))).toBe(true)
     expect(existsSync(join(root, 'src', 'users'))).toBe(false)
     expect(stdout).toContain('cd my-app')
@@ -146,5 +147,38 @@ describe.each(TEMPLATES.map((template) => template.name))('generated %s project'
     const result = await run(root, ['bun', 'run', 'typecheck'])
 
     expect(result.code, result.output).toBe(0)
+  }, 60_000)
+
+  it('passes its own lint', async () => {
+    const result = await run(root, ['bun', 'run', 'lint'])
+
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).not.toContain('warning')
+  }, 60_000)
+
+  it('builds a bundle that serves requests', async () => {
+    expect((await run(root, ['bun', 'run', 'build'])).code).toBe(0)
+
+    const server = Bun.spawn(['bun', 'dist/main.js'], { cwd: root, env: { ...process.env, PORT: '0' }, stdout: 'pipe' })
+
+    try {
+      const decoder = new TextDecoder()
+      let output = ''
+
+      for await (const chunk of server.stdout) {
+        output += decoder.decode(chunk, { stream: true })
+
+        if (output.includes('Listening on')) {
+          break
+        }
+      }
+
+      const url = /Listening on (\S+)/.exec(output)?.[1]
+
+      expect(url).toBeDefined()
+      expect((await fetch(new URL(template === 'demo' ? '/users' : '/', url))).status).toBe(200)
+    } finally {
+      server.kill()
+    }
   }, 60_000)
 })

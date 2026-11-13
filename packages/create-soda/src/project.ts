@@ -6,6 +6,8 @@
  * file systems refuse, a directory holding only `.git` counts as empty, the
  * package name is made valid for npm, and `.gitignore` is stored as
  * `_gitignore` because npm drops `.gitignore` files from published packages.
+ * `.oxlintrc.json` is stored as `_oxlintrc.json`, so that the linter of this
+ * repository does not take it for a nested configuration.
  */
 
 import { existsSync } from 'node:fs'
@@ -26,7 +28,7 @@ export const TEMPLATES: readonly Template[] = [
 ]
 
 /** Template files renamed when copied. */
-const RENAMED: Readonly<Record<string, string>> = { _gitignore: '.gitignore' }
+const RENAMED: Readonly<Record<string, string>> = { _gitignore: '.gitignore', '_oxlintrc.json': '.oxlintrc.json' }
 
 /** `' my-app/ '` → `'my-app'`. */
 export const formatTargetDir = (dir: string): string =>
