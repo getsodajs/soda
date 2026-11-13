@@ -14,7 +14,9 @@ it('keeps the frames of the framework out of errors about the application', asyn
   const error = (await createContainer(AppModule).catch((caught: unknown) => caught)) as Error
   const framework = new URL('../', import.meta.url).pathname
 
-  expect(error.message).toStartWith('No provider for Missing in AppModule (Service → Missing).')
+  expect(error.message).toBe(
+    'No provider for Missing in AppModule (Service → Missing). Add it to the providers of AppModule, or import a module that exports it.'
+  )
   expect(error.stack).toStartWith('DiError: No provider for Missing')
   expect(error.stack).not.toContain(framework)
 })

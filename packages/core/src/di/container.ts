@@ -403,11 +403,9 @@ class Resolver {
       }
     }
 
-    return ''
+    return ` Add it to the providers of ${module.name}, or import a module that exports it.`
   }
 }
-
-
 
 class StartedContainer implements Container {
   readonly controllers: readonly ControllerEntry[]
