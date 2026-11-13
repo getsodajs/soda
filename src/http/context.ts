@@ -4,7 +4,8 @@
  */
 
 import type { Constructor } from '../di/index.ts'
-import { readJsonBody } from './body.ts'
+import { readFormBody, readJsonBody } from './body.ts'
+import type { FormFields } from './body.ts'
 import type { ContextKey } from './context-key.ts'
 import type { MetadataDecorator } from './enhancers.ts'
 import { applyParser } from './parsers.ts'
@@ -55,7 +56,7 @@ export interface RouteInfo {
  */
 export class Context<P extends string = string> {
   #url: URL | undefined
-  #body: Promise<unknown> | undefined
+  #body: { readonly kind: 'JSON' | 'form'; readonly value: Promise<unknown> } | undefined
   #values: Map<ContextKey<unknown>, unknown> | undefined
 
   constructor(
@@ -146,10 +147,33 @@ export class Context<P extends string = string> {
   body(): Promise<unknown>
   body<S extends StandardSchemaV1>(schema: S): Promise<InferOutput<S>>
   async body(schema?: StandardSchemaV1): Promise<unknown> {
-    this.#body ??= readJsonBody(this.req)
-
-    const value = await this.#body
+    const value = await this.#read('JSON', readJsonBody)
 
     return schema === undefined ? value : validate(schema, value, '')
+  }
+
+  /**
+   * Form body (`multipart/form-data` or `application/x-www-form-urlencoded`),
+   * validated by `schema` when given. `415` for another content type.
+   * Repeated fields and fields named `name[]` are arrays; files are `File`s
+   * whose `type` is what the client declared, not checked against the content.
+   */
+  form(): Promise<FormFields>
+  form<S extends StandardSchemaV1>(schema: S): Promise<InferOutput<S>>
+  async form(schema?: StandardSchemaV1): Promise<unknown> {
+    const value = await this.#read('form', readFormBody)
+
+    return schema === undefined ? value : validate(schema, value, '')
+  }
+
+  /** Reads the body once; reading it again in another format is a programming error. */
+  #read(kind: 'JSON' | 'form', read: (req: Request) => Promise<unknown>): Promise<unknown> {
+    if (this.#body === undefined) {
+      this.#body = { kind, value: read(this.req) }
+    } else if (this.#body.kind !== kind) {
+      throw new TypeError(`The body of this request was already read as ${this.#body.kind}, it cannot be read as ${kind}`)
+    }
+
+    return this.#body.value
   }
 }

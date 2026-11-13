@@ -79,3 +79,64 @@ export const readJsonBody = async (req: Request): Promise<unknown> => {
 
   return parseJson(text)
 }
+
+const FORM_TYPE = /^(?:multipart\/form-data|application\/x-www-form-urlencoded)(?:\s*;|$)/i
+const ARRAY_SUFFIX = '[]'
+
+/** A form value: text, or a file of a multipart body. */
+export type FormValue = string | File
+
+/** Fields of a form; repeated fields and fields named `name[]` are arrays. */
+export type FormFields = Record<string, FormValue | FormValue[]>
+
+/**
+ * Turns form data into an object without prototype.
+ *
+ * ```ts
+ * 'a=1&a=2'      => { a: ['1', '2'] }   // repeated fields are kept, not overwritten
+ * 'tags[]=x'     => { tags: ['x'] }     // `[]` always gives an array, even with one value
+ * 'name=Ann'     => { name: 'Ann' }
+ * ```
+ */
+const toFields = (data: Awaited<ReturnType<Request['formData']>>): FormFields => {
+  const fields: FormFields = Object.create(null)
+
+  for (const [rawKey, value] of data) {
+    const array = rawKey.endsWith(ARRAY_SUFFIX)
+    const key = array ? rawKey.slice(0, -ARRAY_SUFFIX.length) : rawKey
+    const current = fields[key]
+
+    if (current === undefined) {
+      fields[key] = array ? [value] : value
+    } else if (Array.isArray(current)) {
+      current.push(value)
+    } else {
+      fields[key] = [current, value]
+    }
+  }
+
+  return fields
+}
+
+/**
+ * Reads a `multipart/form-data` or `application/x-www-form-urlencoded` body:
+ * `415` for another content type, `400` for a malformed body.
+ *
+ * Kept apart from JSON on purpose: an HTML form on another site can post a form
+ * without a CORS preflight, a JSON body cannot. A JSON endpoint must not accept forms.
+ *
+ * `File.type` is the type the client declared, not checked against the content.
+ */
+export const readFormBody = async (req: Request): Promise<FormFields> => {
+  const type = req.headers.get('content-type')
+
+  if (type === null || !FORM_TYPE.test(type)) {
+    throw new UnsupportedMediaTypeException(`Expected a form body, got ${type ?? 'no content type'}`)
+  }
+
+  try {
+    return toFields(await req.formData())
+  } catch (error) {
+    throw new BadRequestException('Request body is not a valid form', { cause: error })
+  }
+}

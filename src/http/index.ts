@@ -3,7 +3,7 @@
  * HTTP layer for Soda: controllers, route decorators, request context, validation, exceptions.
  */
 
-export { body, context, header, param, query, value } from './arguments.ts'
+export { body, context, form, header, param, query, value } from './arguments.ts'
 export type { Argument, ArgumentFor, ArgumentKind, ArgumentValues } from './arguments.ts'
 export { Context } from './context.ts'
 export { ContextKey } from './context-key.ts'
@@ -60,3 +60,4 @@ export type { RouteInfo } from './context.ts'
 export { cors } from './cors.ts'
 export type { CorsOptions } from './cors.ts'
 export type { Middleware, MiddlewareFunction, NestMiddleware, Next } from './middleware.ts'
+export type { FormFields, FormValue } from './body.ts'

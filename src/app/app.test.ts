@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { inject, Module } from '../di/index.ts'
 import type { OnDestroy, OnInit } from '../di/index.ts'
-import { Controller, Get, UseGuards } from '../http/index.ts'
+import { Controller, Get, Post, UseGuards } from '../http/index.ts'
 import type { CanActivate } from '../http/index.ts'
 import { createApp } from './app.ts'
 
@@ -279,5 +279,35 @@ describe('hot reload', () => {
       child.kill()
       await child.exited
     }
+  })
+})
+
+describe('request body limit', () => {
+  it('refuses bodies over maxRequestBodySize before any handler runs', async () => {
+    let calls = 0
+
+    @Controller('/upload')
+    class UploadController {
+      @Post()
+      upload(): string {
+        calls++
+
+        return 'stored'
+      }
+    }
+
+    @Module({ controllers: [UploadController] })
+    class AppModule {}
+
+    const app = await createApp(AppModule)
+    const server = await app.listen({ port: 0, maxRequestBodySize: 1024 })
+    const small = await fetch(`${server.url.origin}/upload`, { method: 'POST', body: 'x'.repeat(100) })
+    const large = await fetch(`${server.url.origin}/upload`, { method: 'POST', body: 'x'.repeat(10_000) })
+
+    await app.close()
+
+    expect(small.status).toBe(201)
+    expect(large.status).toBe(413)
+    expect(calls).toBe(1)
   })
 })

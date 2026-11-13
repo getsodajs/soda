@@ -47,6 +47,11 @@ export interface AppOptions extends ContainerOptions, ControllerRoutesOptions, C
 export interface ListenOptions {
   readonly port?: number
   readonly hostname?: string
+  /**
+   * Largest request body accepted, in bytes; bigger ones are refused before any
+   * handler runs. Bun's default is 128 MiB.
+   */
+  readonly maxRequestBodySize?: number
 }
 
 /** Signals `enableShutdownSignals()` listens to by default. */
@@ -108,9 +113,9 @@ class Application implements App {
       throw new Error(`The application already listens on ${this.#server.url.href}`)
     }
 
-    const { port = 0, hostname } = typeof options === 'number' ? { port: options } : options
+    const { port = 0, hostname, maxRequestBodySize } = typeof options === 'number' ? { port: options } : options
 
-    const server = Bun.serve({ port, hostname, ...this.routes })
+    const server = Bun.serve({ port, hostname, maxRequestBodySize, ...this.routes })
 
     this.#server = server
 

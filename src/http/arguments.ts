@@ -16,6 +16,7 @@
  * called by the framework before the method instead of by the method itself.
  */
 
+import type { FormFields } from './body.ts'
 import type { ContextKey } from './context-key.ts'
 import type { Context, ParamNameOf } from './context.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
@@ -107,3 +108,14 @@ export const value = <T>(key: ContextKey<T>): Argument<T, 'value'> => ({
   name: key.description,
   read: (ctx) => ctx.get(key),
 })
+
+/** Form body, validated by `schema`. Like `@Body()` on a form, or Nest's file interceptors for multipart. */
+export function form(): Argument<FormFields, 'body'>
+export function form<S extends StandardSchemaV1>(schema: S): Argument<InferOutput<S>, 'body'>
+export function form(schema?: StandardSchemaV1): Argument<unknown, 'body'> {
+  return {
+    kind: 'body',
+    name: '',
+    read: schema === undefined ? (ctx) => ctx.form() : (ctx) => ctx.form(schema),
+  }
+}

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'bun:test'
 import { createContainer, inject, Module } from '../di/index.ts'
 import type { ModuleClass } from '../di/index.ts'
 import { compileRoutes, RouteError } from '../routing/index.ts'
-import { body, context, header, param, query } from './arguments.ts'
+import { body, context, form, header, param, query } from './arguments.ts'
 import type { Context } from './context.ts'
 import { All, Controller, Delete, Get, Header, HttpCode, Patch, Post, Route } from './decorators.ts'
 import { ControllerError } from './errors.ts'
@@ -547,4 +547,115 @@ describe('declaration errors', () => {
   }
 
   void typeErrors
+})
+
+describe('forms', () => {
+  interface Profile {
+    readonly name: string
+    readonly tags: readonly string[]
+  }
+
+  const ProfileSchema: StandardSchemaV1<unknown, Profile> = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: (value) => {
+        const fields = value as Record<string, unknown>
+
+        return typeof fields.name === 'string' && Array.isArray(fields.tags)
+          ? { value: { name: fields.name, tags: fields.tags as string[] } }
+          : { issues: [{ message: 'Expected a name and tags', path: [] }] }
+      },
+    },
+  }
+
+  @Controller('/forms')
+  class FormsController {
+    @Post('/raw')
+    async raw(ctx: Context): Promise<object> {
+      const fields = await ctx.form()
+      const avatar = fields.avatar
+
+      return {
+        ...fields,
+        avatar: avatar instanceof File ? { name: avatar.name, size: avatar.size, text: await avatar.text() } : avatar,
+      }
+    }
+
+    @Post('/profile', [form(ProfileSchema)])
+    profile(profile: Profile): Profile {
+      return profile
+    }
+
+    @Post('/json')
+    json(ctx: Context): Promise<unknown> {
+      return ctx.body()
+    }
+
+    @Post('/twice')
+    async twice(ctx: Context): Promise<unknown> {
+      await ctx.form()
+
+      return ctx.body()
+    }
+  }
+
+  @Module({ controllers: [FormsController] })
+  class AppModule {}
+
+  it('reads urlencoded and multipart forms, files included', async () => {
+    const request = await serve(AppModule)
+    const urlencoded = await request('POST', '/forms/raw', {
+      body: 'name=Ann&a=1&a=2&tags[]=x',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    const multipart = new FormData()
+
+    multipart.append('name', 'Bo')
+    multipart.append('avatar', new File(['image bytes'], 'me.png', { type: 'image/png' }))
+
+    expect(await urlencoded.json()).toEqual({ name: 'Ann', a: ['1', '2'], tags: ['x'] })
+    expect(await (await request('POST', '/forms/raw', { body: multipart })).json()).toEqual({
+      name: 'Bo',
+      avatar: { name: 'me.png', size: 11, text: 'image bytes' },
+    })
+  })
+
+  it('validates forms with a schema, as an argument', async () => {
+    const request = await serve(AppModule)
+    const valid = await request('POST', '/forms/profile', {
+      body: 'name=Cy&tags[]=a&tags[]=b',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    const invalid = await request('POST', '/forms/profile', {
+      body: 'name=Cy',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+
+    expect([valid.status, await valid.json()]).toEqual([201, { name: 'Cy', tags: ['a', 'b'] }])
+    expect(invalid.status).toBe(400)
+  })
+
+  it('keeps JSON and forms apart: a JSON endpoint refuses forms, a form endpoint refuses JSON', async () => {
+    const request = await serve(AppModule)
+    const formToJson = await request('POST', '/forms/json', {
+      body: 'name=Ann',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    const jsonToForm = await request('POST', '/forms/raw', json({ name: 'Ann' }))
+
+    expect([formToJson.status, jsonToForm.status]).toEqual([415, 415])
+  })
+
+  it('refuses to read the body twice in different formats', async () => {
+    const logged: unknown[] = []
+    const request = await serve(AppModule, { onError: (error) => logged.push(error) })
+    const response = await request('POST', '/forms/twice', {
+      body: 'name=Ann',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+
+    expect(response.status).toBe(500)
+    expect((logged[0] as Error).message).toBe('The body of this request was already read as form, it cannot be read as JSON')
+  })
 })
