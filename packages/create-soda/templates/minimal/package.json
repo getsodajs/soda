@@ -1,0 +1,19 @@
+{
+  "name": "soda-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/main.ts",
+    "start": "bun src/main.ts",
+    "test": "bun test",
+    "typecheck": "bun check"
+  },
+  "dependencies": {
+    "@getsoda/core": "workspace"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^7.0.2"
+  }
+}

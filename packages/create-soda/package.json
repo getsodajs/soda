@@ -25,13 +25,15 @@
   },
   "files": [
     "dist",
-    "template",
-    "core-version.json"
+    "templates"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && bun scripts/write-core-version.ts"
+    "build": "rm -rf dist && bun build src/index.ts --target node --outfile dist/index.js"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^1.9.0"
   }
 }

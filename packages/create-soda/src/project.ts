@@ -1,6 +1,6 @@
 /**
  * @module
- * Creating a project from the template: names, target directory, files.
+ * Creating a project from a template: names, target directory, files.
  *
  * Rules from `create-vite`: the target directory is cleaned of characters
  * file systems refuse, a directory holding only `.git` counts as empty, the
@@ -11,6 +11,19 @@
 import { existsSync } from 'node:fs'
 import { cp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
+
+export interface Template {
+  /** Directory under `templates/`, and the value of `--template`. */
+  readonly name: string
+  readonly label: string
+  readonly hint: string
+}
+
+/** Templates in the order they are offered; the first is the default. */
+export const TEMPLATES: readonly Template[] = [
+  { name: 'minimal', label: 'Minimal', hint: 'a module, a controller, a service and a test' },
+  { name: 'demo', label: 'Demo', hint: 'users with validation, a guard, logging and CORS' },
+]
 
 /** Template files renamed when copied. */
 const RENAMED: Readonly<Record<string, string>> = { _gitignore: '.gitignore' }
@@ -99,3 +112,7 @@ export const detectPackageManager = (userAgent: string | undefined): string => {
 
   return name === undefined || name === '' ? 'bun' : name
 }
+
+/** Command running a package script: `bun dev`, `npm run dev`. */
+export const runScriptCommand = (manager: string, script: string): string =>
+  manager === 'npm' ? `npm run ${script}` : `${manager} ${script}`

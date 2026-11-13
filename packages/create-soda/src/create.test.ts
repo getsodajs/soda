@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { detectPackageManager, toValidPackageName } from './project.ts'
+import { detectPackageManager, runScriptCommand, TEMPLATES, toValidPackageName } from './project.ts'
 
 const PACKAGE = join(import.meta.dir, '..')
 const CORE = join(PACKAGE, '..', 'core')
@@ -40,7 +40,7 @@ const run = async (cwd: string, command: readonly string[]) => {
 }
 
 describe('create-soda', () => {
-  it('creates a project named after its directory, depending on the current core', async () => {
+  it('creates a minimal project named after its directory, depending on the current core', async () => {
     const { code, stdout } = await create(['my-app'])
     const root = join(directory, 'my-app')
     const manifest = (await Bun.file(join(root, 'package.json')).json()) as {
@@ -54,7 +54,21 @@ describe('create-soda', () => {
     expect(manifest.dependencies['@getsoda/core']).toBe(`^${core.version}`)
     expect(existsSync(join(root, '.gitignore'))).toBe(true)
     expect(existsSync(join(root, '_gitignore'))).toBe(false)
+    expect(existsSync(join(root, 'src', 'app.controller.ts'))).toBe(true)
+    expect(existsSync(join(root, 'src', 'users'))).toBe(false)
     expect(stdout).toContain('cd my-app')
+    expect(stdout).toContain('bun install')
+  })
+
+  it('creates the demo with --template, and refuses unknown templates', async () => {
+    const demo = await create(['demo-app', '--template', 'demo'])
+    const unknown = await create(['other-app', '-t', 'nope'])
+
+    expect(demo.code).toBe(0)
+    expect(existsSync(join(directory, 'demo-app', 'src', 'users', 'users.controller.ts'))).toBe(true)
+    expect(unknown.code).toBe(1)
+    expect(unknown.stderr).toContain('Unknown template "nope"; use minimal or demo')
+    expect(existsSync(join(directory, 'other-app'))).toBe(false)
   })
 
   it('makes the package name valid for npm', async () => {
@@ -90,27 +104,42 @@ describe('create-soda', () => {
     expect(detectPackageManager('bun/1.4.3 npm/? node/v24.0.0 darwin arm64')).toBe('bun')
     expect(detectPackageManager('npm/11.6.0 node/v24.0.0 darwin arm64 workspaces/false')).toBe('npm')
     expect(detectPackageManager(undefined)).toBe('bun')
+    expect(runScriptCommand('npm', 'dev')).toBe('npm run dev')
+    expect(runScriptCommand('bun', 'dev')).toBe('bun dev')
   })
 })
 
-describe('generated project', () => {
-  const root = join(directory, 'e2e-app')
+// The projects depend on the core of this repository, built as it would be published.
+beforeAll(async () => {
+  expect((await run(CORE, ['bun', 'run', 'build'])).code).toBe(0)
+}, 60_000)
+
+/** Tests each generated project passes, by template. */
+const PASSING: Readonly<Record<string, number>> = { minimal: 1, demo: 2 }
+
+describe.each(TEMPLATES.map((template) => template.name))('generated %s project', (template) => {
+  const root = join(directory, `e2e-${template}`)
 
   beforeAll(async () => {
-    // The project depends on the core of this repository, built as it would be published.
-    expect((await run(CORE, ['bun', 'run', 'build'])).code).toBe(0)
-    expect((await create(['e2e-app', '--core-version', `file:${CORE}`])).code).toBe(0)
+    const created = await create([
+      `e2e-${template}`,
+      '--template',
+      template,
+      '--install',
+      '--core-version',
+      `file:${CORE}`,
+    ])
 
-    const install = await run(root, ['bun', 'install'])
-
-    expect(install.code, install.output).toBe(0)
+    expect(created.code, created.stdout + created.stderr).toBe(0)
+    expect(created.stdout).toContain('Installed dependencies')
+    expect(created.stdout).not.toContain('bun install')
   }, 180_000)
 
   it('passes its own tests', async () => {
     const result = await run(root, ['bun', 'test'])
 
     expect(result.code, result.output).toBe(0)
-    expect(result.output).toContain('2 pass')
+    expect(result.output).toContain(`${PASSING[template]} pass`)
   }, 60_000)
 
   it('passes its own type check', async () => {
