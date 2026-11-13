@@ -33,9 +33,23 @@ describe('ConsoleLogger', () => {
     const [line, ...stack] = lines[0]!.line.split('\n')
 
     expect(line).toMatch(
-      /^\d{4}-\d\d-\d\dT[\d:.]+Z {2}ERROR {3}\[Database\] Query failed \{"query":"select 1","error":"Error: connection refused"\}$/
+      new RegExp(`^\\[Soda\\] ${process.pid} {2}- .+ {3}ERROR \\[Database\\] Query failed \\{"query":"select 1","error":"Error: connection refused"\\}$`)
     )
     expect(stack.join('\n')).toBe(error.stack!)
+  })
+
+  it('colors only when asked with a custom output, takes a prefix, and adds the time since the previous line', () => {
+    const plain = capture({ prefix: 'Api' })
+    const colored = capture({ colors: true })
+
+    plain.logger.log('first')
+    plain.logger.log('second')
+    colored.logger.warn('careful')
+
+    expect(plain.lines[0]!.line).toMatch(/^\[Api\] \d+ {2}- .+ {5}LOG first$/)
+    expect(plain.lines[1]!.line).toMatch(/ {5}LOG second \+\d+ms$/)
+    expect(colored.lines[0]!.line).toStartWith('\u001B[33m[Soda] ')
+    expect(colored.lines[0]!.line).toContain('\u001B[33m   WARN\u001B[0m')
   })
 
   it('writes JSON lines that log collectors can parse, whatever the data', () => {
