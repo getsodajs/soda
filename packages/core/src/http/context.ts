@@ -51,11 +51,12 @@ export interface RouteInfo {
  * }
  * ```
  *
- * The URL is parsed only when `url` or `query()` is used; the body is read at
+ * The URL is parsed only when `url` is used, its query only when `query()` is; the body is read at
  * most once; the storage of `set()` is created on the first `set()`.
  */
 export class Context<P extends string = string> {
   #url: URL | undefined
+  #search: URLSearchParams | undefined
   #body: { readonly kind: 'JSON' | 'form'; readonly value: Promise<unknown> } | undefined
   #values: Map<ContextKey<unknown>, unknown> | undefined
 
@@ -113,6 +114,18 @@ export class Context<P extends string = string> {
     return this.#url
   }
 
+  /** The query of the URL, parsed alone: cheaper than a whole `URL`, with the same rules. */
+  #searchParams(): URLSearchParams {
+    if (this.#search === undefined) {
+      const url = this.req.url
+      const start = url.indexOf('?')
+
+      this.#search = this.#url?.searchParams ?? new URLSearchParams(start === -1 ? '' : url.slice(start + 1))
+    }
+
+    return this.#search
+  }
+
   /** Path parameter, decoded; converted and checked when a parser is given. */
   param<N extends ParamNameOf<P>>(name: N): ContextParams<P>[N]
   param<N extends ParamNameOf<P>, V extends ValueParser<unknown>>(name: N, parser: V): Parsed<V>
@@ -126,7 +139,7 @@ export class Context<P extends string = string> {
   query(name: string): string | undefined
   query<V extends ValueParser<unknown>>(name: string, parser: V): Parsed<V>
   query(name: string, parser?: ValueParser<unknown>): unknown {
-    const value = this.url.searchParams.get(name) ?? undefined
+    const value = this.#searchParams().get(name) ?? undefined
 
     return parser === undefined ? value : applyParser(parser, value, name)
   }

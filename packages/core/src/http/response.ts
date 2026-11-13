@@ -33,9 +33,15 @@ export const createResponder = (status: number, headers: readonly [string, strin
     }
   }
 
+  // Without headers of the route, the init holds the status alone, or nothing for 200: Bun builds
+  // such responses fastest, and sends the content type of a string (text/plain;charset=utf-8) and
+  // of Response.json() itself. It is then absent from `response.headers` in middleware, as for any
+  // `new Response('text')` in Bun, and present on the wire.
+  const bare: ResponseInit | undefined = status === 200 ? undefined : { status }
+  const plain: ResponseInit | undefined = headers.length === 0 ? bare : { status, headers: [...headers] }
   // A content type from @Header() replaces the default one instead of being appended to it.
-  const plain: ResponseInit = { status, headers: [...headers] }
-  const text: ResponseInit = hasContentType ? plain : { status, headers: [['content-type', TEXT], ...headers] }
+  const text: ResponseInit | undefined =
+    headers.length === 0 || hasContentType ? plain : { status, headers: [['content-type', TEXT], ...headers] }
 
   if (NULL_BODY_STATUSES.has(status)) {
     return (value) => (value instanceof Response ? value : new Response(null, plain))
