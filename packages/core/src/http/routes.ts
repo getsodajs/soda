@@ -25,6 +25,7 @@ import { ControllerError } from './errors.ts'
 import { createEnhancerResolver, createPipeline } from './pipeline.ts'
 import type { EnhancerResolver } from './pipeline.ts'
 import { createResponder } from './response.ts'
+import { createSseResponder } from './sse.ts'
 
 /**
  * Options of `controllerRoutes`.
@@ -248,7 +249,7 @@ class RoutesBuilder {
           interceptors,
           filters,
           invoke: createInvoker(instance, method, route.args),
-          respond: createResponder(statusOf(metadata, route), metadata.headers),
+          respond: route.sse ? createSseResponder(metadata.headers, this.#onError) : createResponder(statusOf(metadata, route), metadata.headers),
           onError: this.#onError,
         }),
       })

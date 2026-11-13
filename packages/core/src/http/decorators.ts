@@ -41,6 +41,8 @@ export interface RouteMetadata {
   readonly path: string
   /** Declared arguments; `undefined` when the method receives the context. */
   readonly args: readonly Argument<unknown>[] | undefined
+  /** Declared with `@Sse()`: the result is streamed as server-sent events. */
+  readonly sse: boolean
 }
 
 /**
@@ -170,7 +172,7 @@ export const Controller =
 /**
  * Creates the route decorator factory of one HTTP method (any method name, extensions included).
  */
-const routeFactory = (method: string, decorator: string): RouteDecoratorFactory =>
+const routeFactory = (method: string, decorator: string, sse = false): RouteDecoratorFactory =>
   ((pathOrArgs?: string | readonly Argument<unknown>[], args?: readonly Argument<unknown>[]) =>
     (target: object, context: MethodContext) => {
       assertPublicMethod(decorator, context)
@@ -179,7 +181,7 @@ const routeFactory = (method: string, decorator: string): RouteDecoratorFactory 
       const list = typeof pathOrArgs === 'string' ? args : pathOrArgs
 
       // Decorators run bottom-up: unshift keeps the source order.
-      metadataOf(target).routes.unshift({ method, path, args: list })
+      metadataOf(target).routes.unshift({ method, path, args: list, sse })
     }) as RouteDecoratorFactory
 
 /**
@@ -221,6 +223,12 @@ export const Options = routeFactory('OPTIONS', 'Options')
 export const Head = routeFactory('HEAD', 'Head')
 /** Route for every method; a route for a concrete method on the same path wins. */
 export const All = routeFactory('ALL', 'All')
+
+/**
+ * `GET` route streaming server-sent events: the method returns an async
+ * iterable of `SseMessage`, such as an `async function*`. Like Nest's `@Sse()`.
+ */
+export const Sse = routeFactory('GET', 'Sse', true)
 
 /**
  * Status of the responses built from the returned value (not of a returned `Response`).

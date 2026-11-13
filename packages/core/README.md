@@ -120,6 +120,20 @@ class SessionController {
 
 Name cookies that guard sessions with the `__Host-` prefix: browsers then refuse them from subdomains and over HTTP.
 
+## Server-sent events
+
+An `@Sse()` route returns an async iterable of messages, streamed as `text/event-stream`; when the client disconnects, the generator is returned and its `finally` runs:
+
+```ts
+@Sse('ticks')
+async *ticks(): AsyncGenerator<SseMessage> {
+  for (let i = 0; ; i++) {
+    yield { data: { tick: i }, id: String(i) } // also event and retry
+    await Bun.sleep(1000)
+  }
+}
+```
+
 ## JWT
 
 `@getsoda/core/jwt` signs and verifies JSON Web Tokens with WebCrypto: HS256/384/512, RS, PS, ES and EdDSA, keys as secrets, PEM, JWK or `CryptoKey`. The algorithm is fixed by the options, never read from the token, so `alg: none` and algorithm confusion are refused.

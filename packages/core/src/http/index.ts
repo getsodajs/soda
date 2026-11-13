@@ -9,7 +9,9 @@ export { Context } from './context.ts'
 export { CookieSigner, signed } from './cookies.ts'
 export { ContextKey } from './context-key.ts'
 export type { ContextParams, ParamNameOf } from './context.ts'
-export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Route } from './decorators.ts'
+export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Route, Sse } from './decorators.ts'
+export { formatSseMessage } from './sse.ts'
+export type { SseMessage } from './sse.ts'
 export type {
   ArgumentsRouteDecorator,
   MethodMetadataDecorator,

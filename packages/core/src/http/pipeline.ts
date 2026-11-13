@@ -174,7 +174,7 @@ export interface PipelineParts {
   /** In the order they are tried: method, class, global. */
   readonly filters: readonly FilterStep[]
   readonly invoke: (ctx: Context) => unknown
-  readonly respond: (value: unknown) => Response
+  readonly respond: (value: unknown, ctx: Context) => Response
   readonly onError: (error: unknown, req: Request) => void
 }
 
@@ -230,11 +230,11 @@ export const createPipeline = (parts: PipelineParts): Handler => {
 
       if (isThenable(result)) {
         return Promise.resolve(result)
-          .then(respond)
+          .then((value) => respond(value, ctx))
           .catch((error: unknown) => fail(error, ctx))
       }
 
-      return respond(result)
+      return respond(result, ctx)
     } catch (error) {
       return fail(error, ctx)
     }
