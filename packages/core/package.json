@@ -32,6 +32,10 @@
       "types": "./dist/jwt/index.d.ts",
       "default": "./dist/jwt/index.js"
     },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",

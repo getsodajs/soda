@@ -153,6 +153,26 @@ class AuthModule {}
 
 `JwtModule.registerAsync({ inject, useFactory })` takes the options from other providers; `new JwtService(options)` works without the module.
 
+## Testing
+
+`@getsoda/core/testing` serves the application on a free port with a silent logger; `overrides` replace providers, as Nest's `overrideProvider()`:
+
+```ts
+import { createTestApp } from '@getsoda/core/testing'
+
+const app = await createTestApp(AppModule, { overrides: [provide(Mailer, { useValue: fakeMailer })] })
+
+afterAll(() => app.close()) // or `await using app = ...` in a block
+
+test('signs up', async () => {
+  const response = await app.request('/users', { method: 'POST', json: { name: 'Bo' } })
+
+  expect(response.status).toBe(201)
+})
+```
+
+A single service needs no server: `createContainer(UsersModule, { overrides })`.
+
 ## License
 
 [MIT](./LICENSE)
