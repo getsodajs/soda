@@ -22,13 +22,15 @@
 import { createContainer, provide } from '../di/index.ts'
 import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
 import { destroyAll, initializeAll } from '../di/lifecycle.ts'
-import { buildRoutes } from '../http/index.ts'
+import { buildRoutes, ControllerError } from '../http/index.ts'
 import type { ControllerRoutesOptions, MappedController, Middleware } from '../http/index.ts'
 import { errorResponse } from '../http/exceptions.ts'
 import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
 import { ConsoleLogger, Logger, SilentLogger } from '../logger/index.ts'
 import { compileRoutes } from '../routing/index.ts'
-import type { CompiledRoutes, CompileOptions } from '../routing/index.ts'
+import type { CompiledRoutes, CompileOptions, NativeHandler } from '../routing/index.ts'
+import { websocketHandler } from '../websocket/gateway.ts'
+import type { BuiltGateway, GatewaySocketData } from '../websocket/gateway.ts'
 import { release, takeOver } from './hot.ts'
 
 /**
@@ -68,16 +70,16 @@ const DEFAULT_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
  */
 export interface App {
   readonly container: Container
-  /** Routes for `Bun.serve()`, when serving them yourself instead of calling `listen()`. */
-  readonly routes: CompiledRoutes
+  /** Routes (and WebSocket handlers) for `Bun.serve()`, when serving them yourself instead of calling `listen()`. */
+  readonly routes: ServeRoutes
   /** The server once `listen()` resolved. */
-  readonly server: Bun.Server<undefined> | undefined
+  readonly server: Bun.Server<GatewaySocketData> | undefined
   /**
    * Starts serving. Under `bun --hot`, a new version of the application
    * listening on the same port takes the server over from the previous one,
    * which is then destroyed (its server is not stopped: it is shared).
    */
-  listen(options?: number | ListenOptions): Promise<Bun.Server<undefined>>
+  listen(options?: number | ListenOptions): Promise<Bun.Server<GatewaySocketData>>
   /**
    * Graceful shutdown: refuses new requests, waits for those in flight, then
    * runs `onDestroy` hooks. Safe to call more than once, even from a hook.
@@ -92,27 +94,35 @@ export interface App {
 
 class Application implements App {
   readonly container: Container
-  readonly routes: CompiledRoutes
-  #server: Bun.Server<undefined> | undefined
+  readonly routes: ServeRoutes
+  #server: Bun.Server<GatewaySocketData> | undefined
   /** Set when a new version took the server over: it must not be stopped. */
   #handedOver = false
   #closing: Promise<void> | undefined
   readonly #enhancers: readonly unknown[]
   readonly #signals = new Map<NodeJS.Signals, () => void>()
   readonly #logger: Logger
+  readonly #gateways: readonly BuiltGateway[]
 
-  constructor(container: Container, routes: CompiledRoutes, enhancers: readonly unknown[], logger: Logger) {
+  constructor(
+    container: Container,
+    routes: ServeRoutes,
+    gateways: readonly BuiltGateway[],
+    enhancers: readonly unknown[],
+    logger: Logger
+  ) {
     this.container = container
     this.routes = routes
+    this.#gateways = gateways
     this.#enhancers = enhancers
     this.#logger = logger
   }
 
-  get server(): Bun.Server<undefined> | undefined {
+  get server(): Bun.Server<GatewaySocketData> | undefined {
     return this.#server
   }
 
-  async listen(options: number | ListenOptions = {}): Promise<Bun.Server<undefined>> {
+  async listen(options: number | ListenOptions = {}): Promise<Bun.Server<GatewaySocketData>> {
     if (this.#closing !== undefined) {
       throw new Error('Cannot listen: the application is closed')
     }
@@ -191,6 +201,11 @@ class Application implements App {
     const server = this.#server
 
     try {
+      // Open sockets would keep stop() waiting; under --hot, clients reconnect to the new version.
+      for (const gateway of this.#gateways) {
+        gateway.runtime.closeAll()
+      }
+
       if (server !== undefined && !this.#handedOver) {
         await server.stop()
       }
@@ -245,8 +260,37 @@ const destroyEverything = async (enhancers: readonly unknown[], container: Conta
   }
 }
 
+/**
+ * Routes and WebSocket handlers for `Bun.serve()`: the handshakes of gateways
+ * are native routes of their own, outside middleware, as an upgrade returns no response.
+ */
+export interface ServeRoutes {
+  readonly routes: Record<string, NativeHandler | BuiltGateway['handle']>
+  readonly fetch: CompiledRoutes['fetch']
+  readonly websocket: Bun.WebSocketHandler<GatewaySocketData>
+}
+
+const withGateways = (compiled: CompiledRoutes, gateways: readonly BuiltGateway[]): ServeRoutes => {
+  const routes: ServeRoutes['routes'] = { ...compiled.routes }
+
+  for (const gateway of gateways) {
+    if (Object.hasOwn(routes, gateway.path)) {
+      throw new ControllerError('DUPLICATE_ROUTE', `The WebSocket gateway on ${gateway.path} has the path of another gateway or route`)
+    }
+
+    routes[gateway.path] = gateway.handle
+  }
+
+  return { routes, fetch: compiled.fetch, websocket: websocketHandler }
+}
+
 /** What Nest logs at startup: the modules, then each controller and its routes. */
-const logStartup = (logger: Logger, container: Container, controllers: readonly MappedController[]): void => {
+const logStartup = (
+  logger: Logger,
+  container: Container,
+  controllers: readonly MappedController[],
+  gateways: readonly BuiltGateway[]
+): void => {
   const modules = logger.child('Container')
   const routes = logger.child('Routes')
 
@@ -260,6 +304,10 @@ const logStartup = (logger: Logger, container: Container, controllers: readonly 
     for (const route of mapped) {
       routes.log(`Mapped {${route.path}, ${route.method}} route`)
     }
+  }
+
+  for (const gateway of gateways) {
+    routes.log(`WebSocket gateway {${gateway.path}}, events: ${gateway.runtime.events.join(', ') || 'none'}`)
   }
 }
 
@@ -293,7 +341,7 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     })
     const built = buildRoutes(container, { ...options, onError })
 
-    logStartup(logger, container, built.controllers)
+    logStartup(logger, container, built.controllers, built.gateways)
     enhancers.push(...built.enhancers)
     await initializeAll(enhancers)
     own.log('Application started')
@@ -303,7 +351,7 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
       errorResponse(error, (unknown) => onError(unknown, req))
     )
 
-    return new Application(container, routes, enhancers, own)
+    return new Application(container, withGateways(routes, built.gateways), built.gateways, enhancers, own)
   } catch (error) {
     try {
       await destroyEverything(enhancers, container)

@@ -14,6 +14,7 @@
 import type { Constructor, Container, ControllerEntry, ModuleClass } from '../di/index.ts'
 import type { RouteDefinition } from '../routing/index.ts'
 import { parsePath } from '../routing/path.ts'
+import { methodNames } from '../utils/object.ts'
 import { isThenable } from '../utils/promise.ts'
 import type { Argument } from './arguments.ts'
 import type { Context, RouteInfo } from './context.ts'
@@ -26,6 +27,9 @@ import { createEnhancerResolver, createPipeline } from './pipeline.ts'
 import type { EnhancerResolver } from './pipeline.ts'
 import { createResponder } from './response.ts'
 import { createSseResponder } from './sse.ts'
+import { getGatewayPath } from '../websocket/decorators.ts'
+import { buildGateway } from '../websocket/gateway.ts'
+import type { BuiltGateway } from '../websocket/gateway.ts'
 
 /**
  * Options of `controllerRoutes`.
@@ -61,29 +65,6 @@ const joinPaths = (...parts: readonly string[]): string => {
   }
 
   return path || '/'
-}
-
-/**
- * Public method names along the prototype chain, most derived first, without duplicates.
- */
-const methodNames = (instance: object): string[] => {
-  const names: string[] = []
-  const seen = new Set<string>(['constructor'])
-
-  for (
-    let prototype: object | null = Object.getPrototypeOf(instance);
-    prototype !== null && prototype !== Object.prototype;
-    prototype = Object.getPrototypeOf(prototype)
-  ) {
-    for (const name of Object.getOwnPropertyNames(prototype)) {
-      if (!seen.has(name)) {
-        seen.add(name)
-        names.push(name)
-      }
-    }
-  }
-
-  return names
 }
 
 /** Every `param()` must name a parameter of the full path, controller prefix included. */
@@ -158,6 +139,7 @@ const resolveAll = <T, S>(
 class RoutesBuilder {
   readonly routes: RouteDefinition[] = []
   readonly controllers: MappedController[] = []
+  readonly gateways: BuiltGateway[] = []
   /** Guards, interceptors and filters created from classes, in creation order. */
   readonly enhancers: unknown[] = []
   readonly #options: ControllerRoutesOptions
@@ -175,6 +157,14 @@ class RoutesBuilder {
   }
 
   addController(entry: ControllerEntry): void {
+    const gatewayPath = getGatewayPath(entry.controller)
+
+    if (gatewayPath !== undefined) {
+      this.#addGateway(entry, gatewayPath)
+
+      return
+    }
+
     const controllerPath = getControllerPath(entry.controller)
 
     if (controllerPath === undefined) {
@@ -194,6 +184,24 @@ class RoutesBuilder {
     }
 
     this.controllers.push({ controller: entry.controller, path: basePath, routes: this.routes.slice(start) })
+  }
+
+  /** A gateway: its handshake gets the guards and filters of the class and the global ones. */
+  #addGateway(entry: ControllerEntry, gatewayPath: string): void {
+    const local = this.#resolverOf(entry)
+    const controller = getClassEnhancers(entry.controller)
+    const options = this.#options
+
+    this.gateways.push(
+      buildGateway({
+        entry,
+        path: joinPaths(options.prefix ?? '', gatewayPath),
+        guards: resolveAll([options.guards ?? [], controller.guards, []], this.#global.guard, local.guard),
+        filters: resolveAll([options.filters ?? [], controller.filters, []], this.#global.filter, local.filter).reverse(),
+        metadata: controller.metadata,
+        onError: this.#onError,
+      })
+    )
   }
 
   #resolverOf(entry: ControllerEntry): EnhancerResolver {
@@ -273,6 +281,8 @@ export interface BuiltRoutes {
   readonly routes: RouteDefinition[]
   /** In module order. */
   readonly controllers: readonly MappedController[]
+  /** WebSocket gateways, in module order. */
+  readonly gateways: readonly BuiltGateway[]
   /** In creation order. */
   readonly enhancers: readonly unknown[]
 }
@@ -287,7 +297,7 @@ export const buildRoutes = (container: Container, options: ControllerRoutesOptio
     builder.addController(entry)
   }
 
-  return { routes: builder.routes, controllers: builder.controllers, enhancers: builder.enhancers }
+  return { routes: builder.routes, controllers: builder.controllers, gateways: builder.gateways, enhancers: builder.enhancers }
 }
 
 /**

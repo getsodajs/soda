@@ -11,6 +11,8 @@
  * - `INVALID_STATUS`: `@HttpCode()` with a status a `Response` cannot have, or twice on one method.
  * - `INVALID_HEADER`: `@Header()` with a name or value `Headers` rejects.
  * - `UNKNOWN_PARAM`: `param('x')` in an argument list names no parameter of the route path.
+ * - `INVALID_PATH`: a WebSocket gateway path that is not static.
+ * - `DUPLICATE_ROUTE`: a gateway on the path of another gateway or route.
  */
 export type ControllerErrorCode =
   | 'NOT_A_CONTROLLER'
@@ -18,6 +20,8 @@ export type ControllerErrorCode =
   | 'INVALID_STATUS'
   | 'INVALID_HEADER'
   | 'UNKNOWN_PARAM'
+  | 'INVALID_PATH'
+  | 'DUPLICATE_ROUTE'
 
 /**
  * Error thrown by the controller decorators (when the class is defined) and by

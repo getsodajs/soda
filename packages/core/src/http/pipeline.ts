@@ -21,10 +21,10 @@ import { getCaughtExceptions } from './enhancers.ts'
 import type { CallHandler, CanActivate, ExceptionFilter, FilterLike, Guard, Interceptor, InterceptorLike } from './enhancers.ts'
 import { errorResponse, ForbiddenException } from './exceptions.ts'
 
-type GuardStep = (ctx: Context) => unknown
-type InterceptorStep = (ctx: Context, next: CallHandler) => unknown
+export type GuardStep = (ctx: Context) => unknown
+export type InterceptorStep = (ctx: Context, next: CallHandler) => unknown
 
-interface FilterStep {
+export interface FilterStep {
   /** Empty: catches everything. */
   readonly types: readonly ClassToken<unknown>[]
   readonly handle: (error: unknown, ctx: Context) => Response | Promise<Response>

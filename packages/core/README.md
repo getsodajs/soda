@@ -134,6 +134,30 @@ async *ticks(): AsyncGenerator<SseMessage> {
 }
 ```
 
+## WebSockets
+
+A gateway is listed in `controllers` like a controller; its guards run on the handshake, and frames follow the protocol of Nest's `WsAdapter`, `{ "event": "...", "data": ... }`:
+
+```ts
+@WebSocketGateway('/chat')
+@UseGuards(JwtGuard) // browsers send cookies with the handshake
+class ChatGateway implements OnGatewayConnection {
+  handleConnection(socket: GatewaySocket) {
+    socket.subscribe('room')
+  }
+
+  @SubscribeMessage('say')
+  say(data: string, socket: GatewaySocket) {
+    const user = socket.data.context.get(JWT_PAYLOAD).sub
+
+    socket.publish('room', JSON.stringify({ event: 'said', data: { user, text: data } }))
+    return { event: 'sent' } // sent back to this socket
+  }
+}
+```
+
+`socket` is Bun's `ServerWebSocket`, with its pub/sub. Frames that are not such JSON are dropped; when the application closes, sockets are closed with code 1001.
+
 ## JWT
 
 `@getsoda/core/jwt` signs and verifies JSON Web Tokens with WebCrypto: HS256/384/512, RS, PS, ES and EdDSA, keys as secrets, PEM, JWK or `CryptoKey`. The algorithm is fixed by the options, never read from the token, so `alg: none` and algorithm confusion are refused.

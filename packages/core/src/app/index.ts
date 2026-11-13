@@ -4,4 +4,4 @@
  */
 
 export { createApp } from './app.ts'
-export type { App, AppOptions, ListenOptions } from './app.ts'
+export type { App, AppOptions, ListenOptions, ServeRoutes } from './app.ts'
