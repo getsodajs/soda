@@ -13,11 +13,11 @@
     },
     "packages/core": {
       "name": "@getsoda/core",
-      "version": "0.2.0",
+      "version": "0.2.1",
     },
     "packages/create-soda": {
       "name": "create-soda",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "bin": {
         "create-soda": "dist/index.js",
       },
