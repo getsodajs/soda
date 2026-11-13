@@ -33,6 +33,10 @@ export interface Argument<T, K extends ArgumentKind = ArgumentKind, N extends st
   /** Parameter, query, header or cookie name; the key description for `value`; empty for `body` and `context`. */
   readonly name: N
   readonly read: (ctx: Context) => T | Promise<T>
+  /** The parser or schema the value goes through, for API descriptions such as OpenAPI. */
+  readonly source?: ValueParser<unknown> | StandardSchemaV1
+  /** Set by `form()`: the body is a form, not JSON. */
+  readonly multipart?: true
 }
 
 /** Arguments accepted by a route with path `P`: `param()` names must exist in it. */
@@ -69,6 +73,7 @@ export function param(name: string, parser?: ValueParser<unknown>): Argument<unk
   return {
     kind: 'param',
     name,
+    source: parser,
     read: parser === undefined ? (ctx) => ctx.param(name) : (ctx) => ctx.param(name, parser),
   }
 }
@@ -80,6 +85,7 @@ export function query(name: string, parser?: ValueParser<unknown>): Argument<unk
   return {
     kind: 'query',
     name,
+    source: parser,
     read: parser === undefined ? (ctx) => ctx.query(name) : (ctx) => ctx.query(name, parser),
   }
 }
@@ -91,6 +97,7 @@ export function header(name: string, parser?: ValueParser<unknown>): Argument<un
   return {
     kind: 'header',
     name,
+    source: parser,
     read: parser === undefined ? (ctx) => ctx.header(name) : (ctx) => ctx.header(name, parser),
   }
 }
@@ -102,6 +109,7 @@ export function cookie(name: string, parser?: ValueParser<unknown>): Argument<un
   return {
     kind: 'cookie',
     name,
+    source: parser,
     read: parser === undefined ? (ctx) => ctx.cookie(name) : (ctx) => ctx.cookie(name, parser),
   }
 }
@@ -113,6 +121,7 @@ export function body(schema?: StandardSchemaV1): Argument<unknown, 'body'> {
   return {
     kind: 'body',
     name: '',
+    source: schema,
     read: schema === undefined ? (ctx) => ctx.body() : (ctx) => ctx.body(schema),
   }
 }
@@ -142,6 +151,8 @@ export function form(schemaOrLimits?: StandardSchemaV1 | FormLimits, limits?: Fo
   return {
     kind: 'body',
     name: '',
+    source: isStandardSchema(schemaOrLimits) ? schemaOrLimits : undefined,
+    multipart: true,
     read: isStandardSchema(schemaOrLimits) ? (ctx) => ctx.form(schemaOrLimits, limits) : (ctx) => ctx.form(schemaOrLimits),
   }
 }

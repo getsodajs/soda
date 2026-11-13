@@ -20,6 +20,10 @@ import type { InferOutput, StandardSchemaV1 } from './schema.ts'
  */
 export interface Parser<T> {
   readonly parse: (value: string | undefined, name: string) => T
+  /** JSON Schema of the accepted strings, for API descriptions such as OpenAPI. */
+  readonly jsonSchema?: Readonly<Record<string, unknown>>
+  /** `true` when a missing value is accepted. */
+  readonly optional?: boolean
 }
 
 /** What `param()`, `query()` and `header()` accept to convert a value. */
@@ -46,8 +50,11 @@ export const failure = (name: string, expected: string): BadRequestException =>
 const createParser = <T>(
   expected: string,
   convert: (value: string) => T | undefined,
-  options: ParserOptions
+  options: ParserOptions,
+  jsonSchema: Readonly<Record<string, unknown>>
 ): Parser<T | undefined> => ({
+  jsonSchema,
+  optional: options.optional === true,
   parse: (value, name) => {
     if (value === undefined) {
       if (options.optional === true) {
@@ -79,7 +86,8 @@ export const int = <const O extends ParserOptions = {}>(options?: O): Parser<Res
 
       return Number.isSafeInteger(number) ? number : undefined
     },
-    options ?? {}
+    options ?? {},
+    { type: 'integer' }
   ) as Parser<Result<number, O>>
 
 /** Finite decimal number: `'1.5'`, `'-2'`, `'1e3'`. */
@@ -91,18 +99,21 @@ export const number = <const O extends ParserOptions = {}>(options?: O): Parser<
 
       return Number.isFinite(parsed) ? parsed : undefined
     },
-    options ?? {}
+    options ?? {},
+    { type: 'number' }
   ) as Parser<Result<number, O>>
 
 /** `'true'` or `'false'`. */
 export const boolean = <const O extends ParserOptions = {}>(options?: O): Parser<Result<boolean, O>> =>
-  createParser('boolean string', (value) => (value === 'true' ? true : value === 'false' ? false : undefined), options ?? {}) as Parser<
-    Result<boolean, O>
-  >
+  createParser('boolean string', (value) => (value === 'true' ? true : value === 'false' ? false : undefined), options ?? {}, {
+    type: 'boolean',
+  }) as Parser<Result<boolean, O>>
 
 /** UUID of any version, case-insensitive. */
 export const uuid = <const O extends ParserOptions = {}>(options?: O): Parser<Result<string, O>> =>
-  createParser('UUID string', (value) => (UUID.test(value) ? value : undefined), options ?? {}) as Parser<Result<string, O>>
+  createParser('UUID string', (value) => (UUID.test(value) ? value : undefined), options ?? {}, { type: 'string', format: 'uuid' }) as Parser<
+    Result<string, O>
+  >
 
 /**
  * Applies a parser or a synchronous Standard Schema to a raw value.

@@ -32,6 +32,10 @@
       "types": "./dist/jwt/index.d.ts",
       "default": "./dist/jwt/index.js"
     },
+    "./openapi": {
+      "types": "./dist/openapi/index.d.ts",
+      "default": "./dist/openapi/index.js"
+    },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
@@ -51,5 +55,8 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepublishOnly": "cd ../.. && bun run lint && bun run typecheck && bun run test && cd packages/core && bun run build"
+  },
+  "devDependencies": {
+    "zod": "4.6.7"
   }
 }

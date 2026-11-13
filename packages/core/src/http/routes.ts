@@ -11,6 +11,7 @@
  * ```
  */
 
+import { InjectionToken } from '../di/index.ts'
 import type { Constructor, Container, ControllerEntry, ModuleClass } from '../di/index.ts'
 import type { RouteDefinition } from '../routing/index.ts'
 import { parsePath } from '../routing/path.ts'
@@ -140,6 +141,8 @@ class RoutesBuilder {
   readonly routes: RouteDefinition[] = []
   readonly controllers: MappedController[] = []
   readonly gateways: BuiltGateway[] = []
+  /** Routes of the controller being added. */
+  #mapped: MappedRoute[] = []
   /** Guards, interceptors and filters created from classes, in creation order. */
   readonly enhancers: unknown[] = []
   readonly #options: ControllerRoutesOptions
@@ -176,14 +179,14 @@ class RoutesBuilder {
 
     const basePath = joinPaths(this.#options.prefix ?? '', controllerPath)
 
-    const start = this.routes.length
+    this.#mapped = []
 
     // The most derived function: an override without route decorators has no metadata.
     for (const name of methodNames(entry.instance as object)) {
       this.#addMethod(entry, basePath, name)
     }
 
-    this.controllers.push({ controller: entry.controller, path: basePath, routes: this.routes.slice(start) })
+    this.controllers.push({ controller: entry.controller, path: basePath, routes: this.#mapped })
   }
 
   /** A gateway: its handshake gets the guards and filters of the class and the global ones. */
@@ -247,6 +250,9 @@ class RoutesBuilder {
         assertParamsExist(route.args, path, `${entry.controller.name}.${name}`)
       }
 
+      const status = statusOf(metadata, route)
+
+      this.#mapped.push({ info, args: route.args, status, sse: route.sse })
       this.routes.push({
         method: route.method,
         path,
@@ -257,7 +263,7 @@ class RoutesBuilder {
           interceptors,
           filters,
           invoke: createInvoker(instance, method, route.args),
-          respond: route.sse ? createSseResponder(metadata.headers, this.#onError) : createResponder(statusOf(metadata, route), metadata.headers),
+          respond: route.sse ? createSseResponder(metadata.headers, this.#onError) : createResponder(status, metadata.headers),
           onError: this.#onError,
         }),
       })
@@ -265,13 +271,35 @@ class RoutesBuilder {
   }
 }
 
-/** A controller and the routes made from it, as `createApp` logs them at startup. */
+/** A route as declared: what startup logs and API descriptions (OpenAPI) show. */
+export interface MappedRoute {
+  /** Controller, method name, HTTP method, full path and custom metadata. */
+  readonly info: RouteInfo
+  /** Declared arguments; `undefined` when the method receives the context. */
+  readonly args: readonly Argument<unknown>[] | undefined
+  /** Status of the responses built from returned values. */
+  readonly status: number
+  /** Declared with `@Sse()`. */
+  readonly sse: boolean
+}
+
+/** A controller and the routes made from it. */
 export interface MappedController {
   readonly controller: Constructor<unknown>
   /** Path of the controller, with the global prefix. */
   readonly path: string
-  readonly routes: readonly RouteDefinition[]
+  readonly routes: readonly MappedRoute[]
 }
+
+/**
+ * The routes of the application, grouped by controller: `inject(ROUTES)`.
+ * Filled once the routes are built, so read it when serving, not in a constructor.
+ */
+export interface RouteRegistry {
+  readonly controllers: readonly MappedController[]
+}
+
+export const ROUTES = new InjectionToken<RouteRegistry>('ROUTES')
 
 /**
  * Routes of every controller, and the guards, interceptors and filters created

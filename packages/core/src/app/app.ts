@@ -22,7 +22,7 @@
 import { createContainer, provide } from '../di/index.ts'
 import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
 import { destroyAll, initializeAll } from '../di/lifecycle.ts'
-import { buildRoutes, ControllerError } from '../http/index.ts'
+import { buildRoutes, ControllerError, ROUTES } from '../http/index.ts'
 import type { ControllerRoutesOptions, MappedController, Middleware } from '../http/index.ts'
 import { errorResponse } from '../http/exceptions.ts'
 import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
@@ -301,8 +301,8 @@ const logStartup = (
   for (const { controller, path, routes: mapped } of controllers) {
     routes.log(`${controller.name} {${path}}:`)
 
-    for (const route of mapped) {
-      routes.log(`Mapped {${route.path}, ${route.method}} route`)
+    for (const { info } of mapped) {
+      routes.log(`Mapped {${info.path}, ${info.method}} route`)
     }
   }
 
@@ -328,9 +328,11 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
 
   own.log('Starting application')
 
+  // Filled once the routes are built; read by what describes them (OpenAPI).
+  const registry: { controllers: readonly MappedController[] } = { controllers: [] }
   const container = await createContainer(root, {
     ...options,
-    providers: [...(options.providers ?? []), provide(Logger, { useValue: logger })],
+    providers: [...(options.providers ?? []), provide(Logger, { useValue: logger }), provide(ROUTES, { useValue: registry })],
   })
   const enhancers: unknown[] = []
 
@@ -341,6 +343,7 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     })
     const built = buildRoutes(container, { ...options, onError })
 
+    registry.controllers = built.controllers
     logStartup(logger, container, built.controllers, built.gateways)
     enhancers.push(...built.enhancers)
     await initializeAll(enhancers)

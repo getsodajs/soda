@@ -191,6 +191,28 @@ class AuthModule {}
 
 `JwtModule.registerAsync({ inject, useFactory })` takes the options from other providers; `new JwtService(options)` works without the module.
 
+## OpenAPI
+
+`@getsoda/core/openapi` describes the routes from what validates them: argument parsers and schemas implementing [Standard JSON Schema](https://standardschema.dev) (zod does). Import the module to serve the document and a Swagger UI page:
+
+```ts
+import { ApiBearerAuth, ApiOperation, ApiResponses, ApiTags, OpenApiModule } from '@getsoda/core/openapi'
+
+@Controller('users')
+@ApiTags('users')
+class UsersController {
+  @Get(':id', [param('id', int())])
+  @ApiOperation({ summary: 'One user' })
+  @ApiResponses({ 200: { description: 'The user', schema: User }, 404: { description: 'No such user' } })
+  findOne(id: number) {}
+}
+
+@Module({ imports: [OpenApiModule.forRoot({ info: { title: 'Shop', version: '1.0.0' }, ui: '/docs' })] })
+class AppModule {}
+```
+
+`/openapi.json` and `/docs` follow the global prefix; `@ApiExclude()` leaves a route out, `createOpenApiDocument(inject(ROUTES).controllers, options)` gives the document itself.
+
 ## Testing
 
 `@getsoda/core/testing` serves the application on a free port with a silent logger; `overrides` replace providers, as Nest's `overrideProvider()`:

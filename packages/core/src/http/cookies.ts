@@ -84,6 +84,8 @@ type Result<O extends ParserOptions> = O extends { readonly optional: true } ? s
  * forged cookie is no better than none.
  */
 export const signed = <const O extends ParserOptions = {}>(signer: CookieSigner, options?: O): Parser<Result<O>> => ({
+  jsonSchema: { type: 'string' },
+  optional: options?.optional === true,
   parse: (value, name) => {
     const unsigned = value === undefined ? undefined : signer.unsign(value)
 
