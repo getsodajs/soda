@@ -39,7 +39,8 @@ const INTEGER = /^-?\d+$/
 const NUMBER = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const failure = (name: string, expected: string): BadRequestException =>
+/** The `400` of a value that is missing or not what a parser expects. */
+export const failure = (name: string, expected: string): BadRequestException =>
   new BadRequestException(`Validation failed for "${name}" (${expected} is expected)`)
 
 const createParser = <T>(

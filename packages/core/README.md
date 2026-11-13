@@ -72,6 +72,31 @@ app.enableShutdownSignals()
 await app.listen(3000)
 ```
 
+## Cookies
+
+`ctx.cookies` is Bun's `CookieMap` for the request: what you set or delete is sent with the response, whatever the response is. Signed cookies can be read by the client but not forged:
+
+```ts
+import { CookieSigner, cookie, signed } from '@getsoda/core'
+
+const signer = new CookieSigner(process.env.COOKIE_SECRET!) // or [current, previous] to rotate
+
+@Controller('session')
+class SessionController {
+  @Post()
+  login(ctx: Context) {
+    ctx.cookies.set('session', signer.sign('user-1'), { httpOnly: true, secure: true, sameSite: 'strict' })
+  }
+
+  @Get([cookie('session', signed(signer))]) // 400 when missing or forged
+  me(userId: string) {
+    return { userId }
+  }
+}
+```
+
+Name cookies that guard sessions with the `__Host-` prefix: browsers then refuse them from subdomains and over HTTP.
+
 ## License
 
 [MIT](./LICENSE)

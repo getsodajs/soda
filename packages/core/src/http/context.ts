@@ -60,7 +60,7 @@ export class Context<P extends string = string> {
   #values: Map<ContextKey<unknown>, unknown> | undefined
 
   constructor(
-    readonly req: Request,
+    readonly req: Bun.BunRequest,
     readonly params: ContextParams<P>,
     readonly route: RouteInfo
   ) {}
@@ -136,6 +136,28 @@ export class Context<P extends string = string> {
   header<V extends ValueParser<unknown>>(name: string, parser: V): Parsed<V>
   header(name: string, parser?: ValueParser<unknown>): unknown {
     const value = this.req.headers.get(name) ?? undefined
+
+    return parser === undefined ? value : applyParser(parser, value, name)
+  }
+
+  /**
+   * Cookies of the request: Bun's `CookieMap`. What `set()` and `delete()`
+   * change is sent with the response as `Set-Cookie`, whatever the response is.
+   *
+   * ```ts
+   * ctx.cookies.set('theme', 'dark', { maxAge: 60 * 60 * 24 * 365 })
+   * ctx.cookies.delete('session')
+   * ```
+   */
+  get cookies(): Bun.CookieMap {
+    return this.req.cookies
+  }
+
+  /** Cookie, decoded; converted and checked when a parser is given, such as `signed()`. */
+  cookie(name: string): string | undefined
+  cookie<V extends ValueParser<unknown>>(name: string, parser: V): Parsed<V>
+  cookie(name: string, parser?: ValueParser<unknown>): unknown {
+    const value = this.req.cookies.get(name) ?? undefined
 
     return parser === undefined ? value : applyParser(parser, value, name)
   }

@@ -22,14 +22,14 @@ import type { Context, ParamNameOf } from './context.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 
-export type ArgumentKind = 'param' | 'query' | 'header' | 'body' | 'context' | 'value'
+export type ArgumentKind = 'param' | 'query' | 'header' | 'cookie' | 'body' | 'context' | 'value'
 
 /**
  * One argument of a handler: where it comes from and how it is read.
  */
 export interface Argument<T, K extends ArgumentKind = ArgumentKind, N extends string = string> {
   readonly kind: K
-  /** Parameter, query or header name; the key description for `value`; empty for `body` and `context`. */
+  /** Parameter, query, header or cookie name; the key description for `value`; empty for `body` and `context`. */
   readonly name: N
   readonly read: (ctx: Context) => T | Promise<T>
 }
@@ -77,6 +77,17 @@ export function header(name: string, parser?: ValueParser<unknown>): Argument<un
     kind: 'header',
     name,
     read: parser === undefined ? (ctx) => ctx.header(name) : (ctx) => ctx.header(name, parser),
+  }
+}
+
+/** Cookie. Like `@Cookies('session')` with `cookie-parser`; `signed(signer)` checks a signed one. */
+export function cookie(name: string): Argument<string | undefined, 'cookie'>
+export function cookie<V extends ValueParser<unknown>>(name: string, parser: V): Argument<Parsed<V>, 'cookie'>
+export function cookie(name: string, parser?: ValueParser<unknown>): Argument<unknown, 'cookie'> {
+  return {
+    kind: 'cookie',
+    name,
+    read: parser === undefined ? (ctx) => ctx.cookie(name) : (ctx) => ctx.cookie(name, parser),
   }
 }
 

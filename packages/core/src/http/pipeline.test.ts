@@ -389,7 +389,8 @@ describe('fast path', () => {
     class AppModule {}
 
     const [route] = controllerRoutes(await createContainer(AppModule))
-    const result = route!.handler(new Request('http://localhost/s'), {})
+    const req = Object.assign(new Request('http://localhost/s'), { params: {}, cookies: new Bun.CookieMap() })
+    const result = route!.handler(req as Bun.BunRequest, {})
 
     expect(result).toBeInstanceOf(Response)
   })

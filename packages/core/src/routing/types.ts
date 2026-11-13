@@ -34,7 +34,7 @@ export type Params = Record<string, string>
  *
  * `params` may be the very object Bun put on `req.params`: treat it as read-only.
  */
-export type Handler = (req: Request, params: Params) => Response | Promise<Response>
+export type Handler = (req: Bun.BunRequest, params: Params) => Response | Promise<Response>
 
 /**
  * Route definition.
