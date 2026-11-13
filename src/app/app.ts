@@ -23,7 +23,9 @@ import { createContainer } from '../di/index.ts'
 import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
 import { destroyAll, initializeAll } from '../di/lifecycle.ts'
 import { buildRoutes } from '../http/index.ts'
-import type { ControllerRoutesOptions } from '../http/index.ts'
+import type { ControllerRoutesOptions, Middleware } from '../http/index.ts'
+import { errorResponse } from '../http/exceptions.ts'
+import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
 import { compileRoutes } from '../routing/index.ts'
 import type { CompiledRoutes, CompileOptions } from '../routing/index.ts'
 import { release, takeOver } from './hot.ts'
@@ -31,7 +33,13 @@ import { release, takeOver } from './hot.ts'
 /**
  * Options of `createApp`.
  */
-export interface AppOptions extends ContainerOptions, ControllerRoutesOptions, CompileOptions {}
+export interface AppOptions extends ContainerOptions, ControllerRoutesOptions, CompileOptions {
+  /**
+   * Middleware run around every request, before routing (404 and preflights
+   * included), first one outermost: `[cors(), requestId]`.
+   */
+  readonly middleware?: readonly Middleware[]
+}
 
 /**
  * Where to listen. `port: 0` picks a free port.
@@ -231,15 +239,25 @@ const destroyEverything = async (enhancers: readonly unknown[], container: Conta
  */
 export const createApp = async (root: ModuleImport, options: AppOptions = {}): Promise<App> => {
   const container = await createContainer(root, options)
-  let enhancers: readonly unknown[] = []
+  const enhancers: unknown[] = []
 
   try {
+    // Middleware first: it wraps everything, so it is initialized first and destroyed last.
+    const middleware = resolveMiddleware(options.middleware ?? [], (fn) => container.runInContext(fn), (instance) => {
+      enhancers.push(instance)
+    })
     const built = buildRoutes(container, options)
 
-    enhancers = built.enhancers
+    enhancers.push(...built.enhancers)
     await initializeAll(enhancers)
 
-    return new Application(container, compileRoutes(built.routes, options), enhancers)
+    const onError = options.onError ?? ((error: unknown) => console.error(error))
+    const compiled = compileRoutes(built.routes, options)
+    const routes = applyMiddleware(middleware, compiled.routes, compiled.fetch, (error, req) =>
+      errorResponse(error, (unknown) => onError(unknown, req))
+    )
+
+    return new Application(container, routes, enhancers)
   } catch (error) {
     try {
       await destroyEverything(enhancers, container)

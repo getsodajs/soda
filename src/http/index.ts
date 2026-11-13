@@ -57,3 +57,6 @@ export type {
   MetadataDecorator,
 } from './enhancers.ts'
 export type { RouteInfo } from './context.ts'
+export { cors } from './cors.ts'
+export type { CorsOptions } from './cors.ts'
+export type { Middleware, MiddlewareFunction, NestMiddleware, Next } from './middleware.ts'
