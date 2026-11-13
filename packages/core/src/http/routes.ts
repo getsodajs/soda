@@ -11,7 +11,7 @@
  * ```
  */
 
-import type { Container, ControllerEntry, ModuleClass } from '../di/index.ts'
+import type { Constructor, Container, ControllerEntry, ModuleClass } from '../di/index.ts'
 import type { RouteDefinition } from '../routing/index.ts'
 import { parsePath } from '../routing/path.ts'
 import { isThenable } from '../utils/promise.ts'
@@ -156,6 +156,7 @@ const resolveAll = <T, S>(
  */
 class RoutesBuilder {
   readonly routes: RouteDefinition[] = []
+  readonly controllers: MappedController[] = []
   /** Guards, interceptors and filters created from classes, in creation order. */
   readonly enhancers: unknown[] = []
   readonly #options: ControllerRoutesOptions
@@ -184,10 +185,14 @@ class RoutesBuilder {
 
     const basePath = joinPaths(this.#options.prefix ?? '', controllerPath)
 
+    const start = this.routes.length
+
     // The most derived function: an override without route decorators has no metadata.
     for (const name of methodNames(entry.instance as object)) {
       this.#addMethod(entry, basePath, name)
     }
+
+    this.controllers.push({ controller: entry.controller, path: basePath, routes: this.routes.slice(start) })
   }
 
   #resolverOf(entry: ControllerEntry): EnhancerResolver {
@@ -251,12 +256,22 @@ class RoutesBuilder {
   }
 }
 
+/** A controller and the routes made from it, as `createApp` logs them at startup. */
+export interface MappedController {
+  readonly controller: Constructor<unknown>
+  /** Path of the controller, with the global prefix. */
+  readonly path: string
+  readonly routes: readonly RouteDefinition[]
+}
+
 /**
  * Routes of every controller, and the guards, interceptors and filters created
  * for them from classes (whose lifecycle hooks the application runs).
  */
 export interface BuiltRoutes {
   readonly routes: RouteDefinition[]
+  /** In module order. */
+  readonly controllers: readonly MappedController[]
   /** In creation order. */
   readonly enhancers: readonly unknown[]
 }
@@ -271,7 +286,7 @@ export const buildRoutes = (container: Container, options: ControllerRoutesOptio
     builder.addController(entry)
   }
 
-  return { routes: builder.routes, enhancers: builder.enhancers }
+  return { routes: builder.routes, controllers: builder.controllers, enhancers: builder.enhancers }
 }
 
 /**

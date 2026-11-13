@@ -324,7 +324,7 @@ describe('logger', () => {
     }
   }
 
-  it('is injectable everywhere and receives unhandled errors with the request', async () => {
+  it('logs the startup, is injectable everywhere and receives unhandled errors with the request', async () => {
     const logger = new MemoryLogger()
 
     class Reporter {
@@ -353,11 +353,19 @@ describe('logger', () => {
     await fetch(`${server.url.origin}/fail`)
     await app.close()
 
-    expect(logger.entries.map(({ level, context, message }) => ({ level, context, message }))).toEqual([
-      { level: 'log', context: 'Soda', message: `Listening on ${server.url.href}` },
-      { level: 'error', context: 'Soda', message: 'Unhandled error while handling a request' },
+    const failure = logger.entries.at(-1)!
+
+    expect(logger.entries.map(({ level, context, message }) => `${level} [${context}] ${message}`)).toEqual([
+      'log [Soda] Starting application',
+      'log [Container] ReportingModule dependencies initialized',
+      'log [Container] AppModule dependencies initialized',
+      'log [Routes] FailingController {/fail}:',
+      'log [Routes] Mapped {/fail, GET} route',
+      'log [Soda] Application started',
+      `log [Soda] Listening on ${server.url.href}`,
+      'error [Soda] Unhandled error while handling a request',
     ])
-    expect(logger.entries[1]!.data).toMatchObject({ method: 'GET', url: `${server.url.origin}/fail` })
-    expect((logger.entries[1]!.data!.error as Error).message).toBe('broken')
+    expect(failure.data).toMatchObject({ method: 'GET', url: `${server.url.origin}/fail` })
+    expect((failure.data!.error as Error).message).toBe('broken')
   })
 })

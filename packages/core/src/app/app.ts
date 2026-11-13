@@ -23,7 +23,7 @@ import { createContainer, provide } from '../di/index.ts'
 import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
 import { destroyAll, initializeAll } from '../di/lifecycle.ts'
 import { buildRoutes } from '../http/index.ts'
-import type { ControllerRoutesOptions, Middleware } from '../http/index.ts'
+import type { ControllerRoutesOptions, MappedController, Middleware } from '../http/index.ts'
 import { errorResponse } from '../http/exceptions.ts'
 import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
 import { ConsoleLogger, Logger, SilentLogger } from '../logger/index.ts'
@@ -245,6 +245,24 @@ const destroyEverything = async (enhancers: readonly unknown[], container: Conta
   }
 }
 
+/** What Nest logs at startup: the modules, then each controller and its routes. */
+const logStartup = (logger: Logger, container: Container, controllers: readonly MappedController[]): void => {
+  const modules = logger.child('Container')
+  const routes = logger.child('Routes')
+
+  for (const module of container.modules) {
+    modules.log(`${module.name} dependencies initialized`)
+  }
+
+  for (const { controller, path, routes: mapped } of controllers) {
+    routes.log(`${controller.name} {${path}}:`)
+
+    for (const route of mapped) {
+      routes.log(`Mapped {${route.path}, ${route.method}} route`)
+    }
+  }
+}
+
 /**
  * Creates the container and the routes, and runs every `onInit` hook.
  *
@@ -259,6 +277,9 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     options.onError ??
     ((error: unknown, req: Request) =>
       own.error('Unhandled error while handling a request', { error, method: req.method, url: req.url }))
+
+  own.log('Starting application')
+
   const container = await createContainer(root, {
     ...options,
     providers: [...(options.providers ?? []), provide(Logger, { useValue: logger })],
@@ -272,8 +293,10 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     })
     const built = buildRoutes(container, { ...options, onError })
 
+    logStartup(logger, container, built.controllers)
     enhancers.push(...built.enhancers)
     await initializeAll(enhancers)
+    own.log('Application started')
 
     const compiled = compileRoutes(built.routes, options)
     const routes = applyMiddleware(middleware, compiled.routes, compiled.fetch, (error, req) =>

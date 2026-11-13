@@ -102,6 +102,8 @@ export interface Container {
   runInContext<R>(fn: () => R, options?: ResolveOptions): R
   /** Every controller, in module order. */
   readonly controllers: readonly ControllerEntry[]
+  /** Every module, imports before importers. */
+  readonly modules: readonly ModuleClass[]
   /**
    * Calls `onDestroy` in reverse creation order, then releases every instance.
    * Calling it again, even from an `onDestroy` hook, returns the same promise.
@@ -417,6 +419,18 @@ class StartedContainer implements Container {
     this.#graph = graph
     this.#resolver = resolver
     this.controllers = controllers
+  }
+
+  get modules(): readonly ModuleClass[] {
+    const modules: ModuleClass[] = []
+
+    for (const node of this.#graph.modules) {
+      if (node.moduleClass !== ContainerProvidersModule) {
+        modules.push(node.moduleClass)
+      }
+    }
+
+    return modules
   }
 
   get<T>(token: Token<T>, options?: ResolveOptions & { readonly optional?: false }): T
