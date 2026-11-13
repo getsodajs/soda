@@ -1,6 +1,6 @@
 {
   "name": "@getsoda/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Class-based web framework for Bun: modules, dependency injection and decorators like Nest, on Bun's native router",
   "keywords": [
     "bun",
