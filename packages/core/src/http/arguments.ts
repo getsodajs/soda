@@ -18,7 +18,7 @@
 
 import type { FormFields, FormLimits } from './body.ts'
 import type { ContextKey } from './context-key.ts'
-import type { Context, ParamNameOf } from './context.ts'
+import type { Context, ContextParams, ParamNameOf } from './context.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
 import { isStandardSchema } from './schema.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
@@ -40,13 +40,27 @@ export type ArgumentFor<P extends string> =
   | Argument<unknown, 'param', ParamNameOf<P>>
   | Argument<unknown, Exclude<ArgumentKind, 'param'>>
 
-/** Values a method receives for an argument list. */
-export type ArgumentValues<A extends readonly Argument<unknown>[]> = {
-  -readonly [K in keyof A]: A[K] extends Argument<infer T> ? T : never
+declare const RAW_PARAM: unique symbol
+
+/**
+ * Value of `param(name)` without parser, typed by the route path:
+ * `string` for `:id`, `string | undefined` for `:id?`.
+ */
+export interface RawParam {
+  readonly [RAW_PARAM]: true
 }
 
-/** Path parameter. Like `@Param('id', ParseIntPipe)`. */
-export function param<const N extends string>(name: N): Argument<string | undefined, 'param', N>
+/** Values a method receives for an argument list on a route with path `P`. */
+export type ArgumentValues<A extends readonly Argument<unknown>[], P extends string = string> = {
+  -readonly [K in keyof A]: A[K] extends Argument<infer T, ArgumentKind, infer N>
+    ? [T] extends [RawParam]
+      ? ContextParams<P>[N]
+      : T
+    : never
+}
+
+/** Path parameter, typed by the route path, or by `parser`. Like `@Param('id', ParseIntPipe)`. */
+export function param<const N extends string>(name: N): Argument<RawParam, 'param', N>
 export function param<const N extends string, V extends ValueParser<unknown>>(
   name: N,
   parser: V

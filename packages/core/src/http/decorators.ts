@@ -81,9 +81,9 @@ export type RouteHandlerHint<P extends string> =
  * Decorator of a route with an argument list: `@Get(':id', [param('id', int())])`.
  * The method must accept the values of the arguments, in order.
  */
-export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[]> = <
+export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[], P extends string = string> = <
   This,
-  M extends (this: This, ...args: ArgumentValues<A>) => unknown,
+  M extends (this: This, ...args: ArgumentValues<A, P>) => unknown,
 >(
   method: M,
   context: ClassMethodDecoratorContext<This, M>
@@ -101,8 +101,8 @@ export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[]> = <
  */
 export interface RouteDecoratorFactory {
   <const P extends string = '/'>(path?: P): RouteDecorator<P>
-  <const P extends string, const A extends readonly ArgumentFor<P>[]>(path: P, args: A): ArgumentsRouteDecorator<A>
-  <const A extends readonly ArgumentFor<'/'>[]>(args: A): ArgumentsRouteDecorator<A>
+  <const P extends string, const A extends readonly ArgumentFor<P>[]>(path: P, args: A): ArgumentsRouteDecorator<A, P>
+  <const A extends readonly ArgumentFor<'/'>[]>(args: A): ArgumentsRouteDecorator<A, '/'>
 }
 
 /**
@@ -191,8 +191,8 @@ export interface MethodRouteDecoratorFactory {
     method: string,
     path: P,
     args: A
-  ): ArgumentsRouteDecorator<A>
-  <const A extends readonly ArgumentFor<'/'>[]>(method: string, args: A): ArgumentsRouteDecorator<A>
+  ): ArgumentsRouteDecorator<A, P>
+  <const A extends readonly ArgumentFor<'/'>[]>(method: string, args: A): ArgumentsRouteDecorator<A, '/'>
 }
 
 /**

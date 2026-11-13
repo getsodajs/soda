@@ -21,9 +21,16 @@ class Handlers {
     return null
   }
 
-  @Get(':token', [param('token')])
-  listed(token: string | undefined) {
-    return token
+  // A parameter the path requires is a string; an optional one may be undefined.
+  @Get(':token/:page?', [param('token'), param('page')])
+  listed(token: string, page: string | undefined) {
+    return [token, page]
+  }
+
+  // @ts-expect-error An optional parameter may be missing.
+  @Get(':token/:page?', [param('page')])
+  optional(page: string) {
+    return page
   }
 
   // A value without an argument list: the error explains how to receive it.
