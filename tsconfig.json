@@ -26,5 +26,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
   },
-  "exclude": ["node_modules", "packages/*/dist", "packages/*/templates"]
+  "exclude": ["node_modules", "packages/*/dist", "packages/*/templates", "bench/http/node_modules", "bench/http/apps/nest"]
 }

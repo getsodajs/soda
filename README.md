@@ -11,6 +11,8 @@ bun create soda my-app
 | [`@getsoda/core`](./packages/core) | the framework |
 | [`create-soda`](./packages/create-soda) | project generator |
 
+The HTTP benchmark against Bun alone, Hono and Nest is in [bench/http](./bench/http).
+
 ## Development
 
 ```bash

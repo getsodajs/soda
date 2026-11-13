@@ -11,6 +11,20 @@ A class-based web framework for [Bun](https://bun.sh): modules, dependency injec
 
 > Soda is in early development (0.x): the API may change between minor versions.
 
+## Performance
+
+Over HTTP, Soda keeps about 94% of the throughput of Bun's native routes alone, on par with Hono and about twice that of Nest on Fastify ([benchmark](https://github.com/getsodajs/soda/tree/main/bench/http)):
+
+| Apple M1, Bun 1.4.3 | GET / | GET /id/:id?name= | POST /json |
+|---|---:|---:|---:|
+| Bun (native routes) | 132,064 | 109,145 | 89,249 |
+| Hono | 124,124 | 103,020 | 80,846 |
+| **Soda** | **126,058** | **103,634** | **81,630** |
+| Nest (Fastify) | 59,874 | 52,124 | 42,984 |
+| Nest (Express) | 50,409 | 46,839 | 34,726 |
+
+Requests per second, median of 3 rounds, 100 connections.
+
 ## Install
 
 ```bash
