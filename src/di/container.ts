@@ -19,11 +19,13 @@
 import { isThenable } from '../utils/promise.ts'
 import { runInContext } from './context.ts'
 import type { InjectionContext } from './context.ts'
-import type { ModuleClass, ModuleImport } from './decorators.ts'
+import { Module } from './decorators.ts'
+import type { DynamicModule, ModuleClass, ModuleImport } from './decorators.ts'
 import { DiError } from './errors.ts'
 import { buildGraph } from './graph.ts'
 import type { ModuleGraph, ModuleNode, ProviderNode } from './graph.ts'
 import { destroyAll, initializeAll } from './lifecycle.ts'
+import { isProviderRecord } from './provider.ts'
 import type { Provider, ProviderDefinition } from './provider.ts'
 import { tokenName } from './token.ts'
 import type { Constructor, Token } from './token.ts'
@@ -43,6 +45,25 @@ export interface ContainerOptions {
    * ```
    */
   readonly overrides?: readonly Provider[]
+  /**
+   * Providers visible in every module, as if exported by a global module:
+   * what the application itself provides, such as its `Logger`.
+   */
+  readonly providers?: readonly Provider[]
+}
+
+/** Module holding `ContainerOptions.providers`. */
+@Module({})
+class ContainerProvidersModule {}
+
+const providersModule = (providers: readonly Provider[]): DynamicModule => {
+  const exports: Token<unknown>[] = []
+
+  for (const provider of providers) {
+    exports.push(isProviderRecord(provider) ? provider.token : provider)
+  }
+
+  return { module: ContainerProvidersModule, providers, exports, global: true }
 }
 
 /**
@@ -524,7 +545,8 @@ const createAll = async (graph: ModuleGraph, resolver: Resolver): Promise<Contro
  * hooks fail too, everything is rethrown as one `AggregateError`, startup error first.
  */
 export const createContainer = async (root: ModuleImport, options: ContainerOptions = {}): Promise<Container> => {
-  const graph = await buildGraph(root, options.overrides ?? [])
+  const providers = options.providers ?? []
+  const graph = await buildGraph(root, options.overrides ?? [], providers.length > 0 ? [providersModule(providers)] : [])
   const resolver = new Resolver(graph)
 
   try {

@@ -34,4 +34,5 @@
 export * from './app/index.ts'
 export * from './di/index.ts'
 export * from './http/index.ts'
+export * from './logger/index.ts'
 export * from './routing/index.ts'

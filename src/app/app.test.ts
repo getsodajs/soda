@@ -6,6 +6,8 @@ import { inject, Module } from '../di/index.ts'
 import type { OnDestroy, OnInit } from '../di/index.ts'
 import { Controller, Get, Post, UseGuards } from '../http/index.ts'
 import type { CanActivate } from '../http/index.ts'
+import { Logger } from '../logger/index.ts'
+import type { LogEntry } from '../logger/index.ts'
 import { createApp } from './app.ts'
 
 const SOURCE = join(import.meta.dir, '..')
@@ -53,7 +55,7 @@ describe('lifecycle', () => {
     @Module({ providers: [Sessions], controllers: [MeController] })
     class AppModule {}
 
-    const app = await createApp(AppModule)
+    const app = await createApp(AppModule, { logger: false })
     const server = await app.listen(0)
 
     expect(log).toEqual(['guard initialized'])
@@ -97,7 +99,7 @@ describe('lifecycle', () => {
     @Module({ providers: [Pool], controllers: [RootController] })
     class AppModule {}
 
-    await expect(createApp(AppModule)).rejects.toThrow('cannot load keys')
+    await expect(createApp(AppModule, { logger: false })).rejects.toThrow('cannot load keys')
     expect(log).toEqual(['pool closed'])
   })
 })
@@ -128,7 +130,7 @@ describe('graceful shutdown', () => {
     @Module({ providers: [Database], controllers: [SlowController] })
     class AppModule {}
 
-    const app = await createApp(AppModule)
+    const app = await createApp(AppModule, { logger: false })
     const server = await app.listen(0)
     const origin = server.url.origin
     const inFlight = fetch(`${origin}/slow`).then((response) => response.text())
@@ -299,7 +301,7 @@ describe('request body limit', () => {
     @Module({ controllers: [UploadController] })
     class AppModule {}
 
-    const app = await createApp(AppModule)
+    const app = await createApp(AppModule, { logger: false })
     const server = await app.listen({ port: 0, maxRequestBodySize: 1024 })
     const small = await fetch(`${server.url.origin}/upload`, { method: 'POST', body: 'x'.repeat(100) })
     const large = await fetch(`${server.url.origin}/upload`, { method: 'POST', body: 'x'.repeat(10_000) })
@@ -309,5 +311,53 @@ describe('request body limit', () => {
     expect(small.status).toBe(201)
     expect(large.status).toBe(413)
     expect(calls).toBe(1)
+  })
+})
+
+describe('logger', () => {
+  /** A logger keeping its entries. */
+  class MemoryLogger extends Logger {
+    readonly entries: LogEntry[] = []
+
+    write(entry: LogEntry): void {
+      this.entries.push(entry)
+    }
+  }
+
+  it('is injectable everywhere and receives unhandled errors with the request', async () => {
+    const logger = new MemoryLogger()
+
+    class Reporter {
+      readonly logger = inject(Logger)
+    }
+
+    @Controller('/fail')
+    class FailingController {
+      @Get()
+      fail(): never {
+        throw new Error('broken')
+      }
+    }
+
+    @Module({ providers: [Reporter], exports: [Reporter] })
+    class ReportingModule {}
+
+    @Module({ imports: [ReportingModule], controllers: [FailingController] })
+    class AppModule {}
+
+    const app = await createApp(AppModule, { logger })
+    const server = await app.listen(0)
+
+    expect(app.container.get(Reporter).logger).toBe(logger)
+
+    await fetch(`${server.url.origin}/fail`)
+    await app.close()
+
+    expect(logger.entries.map(({ level, context, message }) => ({ level, context, message }))).toEqual([
+      { level: 'log', context: 'Soda', message: `Listening on ${server.url.href}` },
+      { level: 'error', context: 'Soda', message: 'Unhandled error while handling a request' },
+    ])
+    expect(logger.entries[1]!.data).toMatchObject({ method: 'GET', url: `${server.url.origin}/fail` })
+    expect((logger.entries[1]!.data!.error as Error).message).toBe('broken')
   })
 })

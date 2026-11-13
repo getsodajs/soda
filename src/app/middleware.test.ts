@@ -31,7 +31,7 @@ class ItemsController {
 class ItemsModule {}
 
 const start = async (options: AppOptions, module: ModuleClass = ItemsModule) => {
-  const app = await createApp(module, options)
+  const app = await createApp(module, { logger: false, ...options })
   const server = await app.listen(0)
 
   apps.push(app)
@@ -132,7 +132,7 @@ describe('middleware', () => {
     @Module({ imports: [ItemsModule], providers: [Clock] })
     class AppModule {}
 
-    const app = await createApp(AppModule, { middleware: [Stamp] })
+    const app = await createApp(AppModule, { logger: false, middleware: [Stamp] })
     const server = await app.listen(0)
 
     expect((await fetch(`${server.url.origin}/items`)).headers.get('x-stamp')).toBe('now')

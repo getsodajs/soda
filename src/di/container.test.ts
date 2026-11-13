@@ -609,6 +609,29 @@ describe('modules', () => {
   })
 })
 
+describe('container providers', () => {
+  it('makes them visible in every module, below what a module provides itself', async () => {
+    const APP_NAME = new InjectionToken<string>('APP_NAME')
+
+    class Reader {
+      readonly name = inject(APP_NAME)
+    }
+
+    @Module({ providers: [Reader], exports: [Reader] })
+    class DeepModule {}
+
+    @Module({ imports: [DeepModule], providers: [provide(APP_NAME, { useValue: 'own' })] })
+    class AppModule {
+      readonly name = inject(APP_NAME)
+    }
+
+    const container = await createContainer(AppModule, { providers: [provide(APP_NAME, { useValue: 'app' })] })
+
+    expect(container.get(Reader).name).toBe('app')
+    expect(container.get(APP_NAME)).toBe('own')
+  })
+})
+
 describe('lifecycle', () => {
   it('runs onInit dependencies first and onDestroy in reverse, on every singleton once', async () => {
     const log: string[] = []

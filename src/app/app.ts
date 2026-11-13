@@ -19,13 +19,14 @@
  * are being destroyed; here they cannot.
  */
 
-import { createContainer } from '../di/index.ts'
+import { createContainer, provide } from '../di/index.ts'
 import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
 import { destroyAll, initializeAll } from '../di/lifecycle.ts'
 import { buildRoutes } from '../http/index.ts'
 import type { ControllerRoutesOptions, Middleware } from '../http/index.ts'
 import { errorResponse } from '../http/exceptions.ts'
 import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
+import { ConsoleLogger, Logger, SilentLogger } from '../logger/index.ts'
 import { compileRoutes } from '../routing/index.ts'
 import type { CompiledRoutes, CompileOptions } from '../routing/index.ts'
 import { release, takeOver } from './hot.ts'
@@ -39,6 +40,11 @@ export interface AppOptions extends ContainerOptions, ControllerRoutesOptions, C
    * included), first one outermost: `[cors(), requestId]`.
    */
   readonly middleware?: readonly Middleware[]
+  /**
+   * Logger of the application, injectable everywhere as `inject(Logger)`.
+   * Defaults to a `ConsoleLogger`; `false` writes nothing.
+   */
+  readonly logger?: Logger | false
 }
 
 /**
@@ -93,11 +99,13 @@ class Application implements App {
   #closing: Promise<void> | undefined
   readonly #enhancers: readonly unknown[]
   readonly #signals = new Map<NodeJS.Signals, () => void>()
+  readonly #logger: Logger
 
-  constructor(container: Container, routes: CompiledRoutes, enhancers: readonly unknown[]) {
+  constructor(container: Container, routes: CompiledRoutes, enhancers: readonly unknown[], logger: Logger) {
     this.container = container
     this.routes = routes
     this.#enhancers = enhancers
+    this.#logger = logger
   }
 
   get server(): Bun.Server<undefined> | undefined {
@@ -122,6 +130,8 @@ class Application implements App {
     if (server.port !== undefined) {
       await takeOver(server.port, this)
     }
+
+    this.#logger.log(`Listening on ${server.url.href}`)
 
     return server
   }
@@ -164,7 +174,7 @@ class Application implements App {
             process.kill(process.pid, signal)
           },
           (error: unknown) => {
-            console.error('Error during shutdown', error)
+            this.#logger.fatal('Shutdown failed', { error })
             process.exit(1)
           }
         )
@@ -243,7 +253,16 @@ const destroyEverything = async (enhancers: readonly unknown[], container: Conta
  * error first, as `createContainer` does.
  */
 export const createApp = async (root: ModuleImport, options: AppOptions = {}): Promise<App> => {
-  const container = await createContainer(root, options)
+  const logger = options.logger === false ? new SilentLogger() : (options.logger ?? new ConsoleLogger())
+  const own = logger.child('Soda')
+  const onError =
+    options.onError ??
+    ((error: unknown, req: Request) =>
+      own.error('Unhandled error while handling a request', { error, method: req.method, url: req.url }))
+  const container = await createContainer(root, {
+    ...options,
+    providers: [...(options.providers ?? []), provide(Logger, { useValue: logger })],
+  })
   const enhancers: unknown[] = []
 
   try {
@@ -251,18 +270,17 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     const middleware = resolveMiddleware(options.middleware ?? [], (fn) => container.runInContext(fn), (instance) => {
       enhancers.push(instance)
     })
-    const built = buildRoutes(container, options)
+    const built = buildRoutes(container, { ...options, onError })
 
     enhancers.push(...built.enhancers)
     await initializeAll(enhancers)
 
-    const onError = options.onError ?? ((error: unknown) => console.error(error))
     const compiled = compileRoutes(built.routes, options)
     const routes = applyMiddleware(middleware, compiled.routes, compiled.fetch, (error, req) =>
       errorResponse(error, (unknown) => onError(unknown, req))
     )
 
-    return new Application(container, routes, enhancers)
+    return new Application(container, routes, enhancers, own)
   } catch (error) {
     try {
       await destroyEverything(enhancers, container)

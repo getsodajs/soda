@@ -139,7 +139,17 @@ class GraphBuilder {
     }
   }
 
-  async build(root: ModuleImport): Promise<ModuleGraph> {
+  /**
+   * `globals` are global modules added next to `root` (the container's own
+   * providers); they are created first, before anything that may inject them.
+   */
+  async build(root: ModuleImport, globals: readonly ModuleImport[]): Promise<ModuleGraph> {
+    const globalNodes: ModuleNode[] = []
+
+    for (let i = 0, len = globals.length; i < len; i++) {
+      globalNodes.push(await this.#module(globals[i], 'createContainer()', i))
+    }
+
     const rootNode = await this.#module(root, 'createContainer()', 0)
 
     // The queue grows while modules are read: breadth-first over imports.
@@ -149,8 +159,8 @@ class GraphBuilder {
 
     this.#assertReplacementsUsed()
 
-    const modules = orderModules(rootNode)
-    const globals: ModuleNode[] = []
+    const modules = orderModules([...globalNodes, rootNode])
+    const globalModules: ModuleNode[] = []
     const providers: ProviderNode[] = []
     const controllers: ProviderNode[] = []
 
@@ -160,14 +170,14 @@ class GraphBuilder {
       assertExportsProvided(node)
 
       if (node.global) {
-        globals.push(node)
+        globalModules.push(node)
       }
 
       providers.push(...node.providers.values())
       controllers.push(...node.controllers)
     }
 
-    return { root: rootNode, modules, globals, providers, controllers }
+    return { root: rootNode, modules, globals: globalModules, providers, controllers }
   }
 
   /** Node for an `imports` entry, created on first sight. */
@@ -320,8 +330,8 @@ const assertExportsProvided = (node: ModuleNode): void => {
   }
 }
 
-/** Modules reachable from `root`, each after the modules it imports. */
-const orderModules = (root: ModuleNode): ModuleNode[] => {
+/** Modules reachable from `roots`, each after the modules it imports. */
+const orderModules = (roots: readonly ModuleNode[]): ModuleNode[] => {
   const ordered: ModuleNode[] = []
   const visited = new Set<ModuleNode>()
 
@@ -339,15 +349,20 @@ const orderModules = (root: ModuleNode): ModuleNode[] => {
     ordered.push(node)
   }
 
-  visit(root)
+  for (const root of roots) {
+    visit(root)
+  }
 
   return ordered
 }
 
 /**
- * Builds the module graph rooted at `root`.
+ * Builds the module graph rooted at `root`, with `globals` as extra global modules.
  *
  * `overrides` replace the provider of their token in every module providing it (for tests).
  */
-export const buildGraph = (root: ModuleImport, overrides: readonly Provider[]): Promise<ModuleGraph> =>
-  new GraphBuilder(overrides).build(root)
+export const buildGraph = (
+  root: ModuleImport,
+  overrides: readonly Provider[],
+  globals: readonly ModuleImport[] = []
+): Promise<ModuleGraph> => new GraphBuilder(overrides).build(root, globals)
