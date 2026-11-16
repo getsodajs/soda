@@ -13,7 +13,7 @@
  * without details for any other error, which is reported.
  */
 
-import type { ControllerEntry } from '../di/index.ts'
+import type { Constructor, ControllerEntry } from '../di/index.ts'
 import type { Argument } from '../http/arguments.ts'
 import { parseJson } from '../http/body.ts'
 import type { Context, RouteInfo } from '../http/context.ts'
@@ -193,11 +193,17 @@ export interface GatewayParts {
   readonly resolveGuard: (guard: Guard) => GuardStep
   readonly metadata: ReadonlyMap<symbol, unknown>
   readonly onError: (error: unknown, req: Request) => void
+  /** Names of the guards of the class, for the startup summary. */
+  readonly declaredGuards: readonly string[]
 }
 
 /** A gateway ready to serve: its native route and its runtime. */
 export interface BuiltGateway {
   readonly path: string
+  /** The gateway class. */
+  readonly gateway: Constructor<unknown>
+  /** Names of the guards of the class. */
+  readonly guards: readonly string[]
   readonly runtime: GatewayRuntime
   /** The native route of the handshake, for `Bun.serve({ routes })`. */
   readonly handle: (req: Bun.BunRequest, server: Bun.Server<GatewaySocketData>) => Response | undefined | Promise<Response | undefined>
@@ -317,5 +323,11 @@ export const buildGateway = (parts: GatewayParts): BuiltGateway => {
     onError: parts.onError,
   })
 
-  return { path: parts.path, runtime, handle: (req, server) => pipeline(req, {}, server) }
+  return {
+    path: parts.path,
+    gateway: parts.entry.controller,
+    guards: parts.declaredGuards,
+    runtime,
+    handle: (req, server) => pipeline(req, {}, server),
+  }
 }

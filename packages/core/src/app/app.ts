@@ -27,10 +27,14 @@ import type { ControllerRoutesOptions, MappedController, Middleware } from '../h
 import { errorResponse } from '../http/exceptions.ts'
 import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
 import { ConsoleLogger, Logger, SilentLogger } from '../logger/index.ts'
+import type { StartupReport, StartupRoute } from '../logger/index.ts'
+import type { Argument } from '../http/arguments.ts'
 import { compileRoutes } from '../routing/index.ts'
 import type { CompiledRoutes, CompileOptions, NativeHandler } from '../routing/index.ts'
 import { websocketHandler } from '../websocket/gateway.ts'
 import type { BuiltGateway, GatewaySocketData } from '../websocket/gateway.ts'
+import { labelOf } from '../utils/name.ts'
+import { VERSION } from '../version.ts'
 import { release, takeOver } from './hot.ts'
 
 /**
@@ -109,19 +113,21 @@ class Application implements App {
   readonly #signals = new Map<NodeJS.Signals, () => void>()
   readonly #logger: Logger
   readonly #gateways: readonly BuiltGateway[]
+  readonly #summary: Summary
 
   constructor(
     container: Container,
     routes: ServeRoutes,
     gateways: readonly BuiltGateway[],
     enhancers: readonly unknown[],
-    logger: Logger
+    summary: Summary
   ) {
     this.container = container
     this.routes = routes
     this.#gateways = gateways
     this.#enhancers = enhancers
-    this.#logger = logger
+    this.#summary = summary
+    this.#logger = summary.logger.child('Soda')
   }
 
   get server(): Bun.Server<GatewaySocketData> | undefined {
@@ -147,7 +153,9 @@ class Application implements App {
       await takeOver(server.port, this)
     }
 
-    this.#logger.log(`Listening on ${server.url.href}`)
+    const { logger, startedAt, ...report } = this.#summary
+
+    logger.startup({ ...report, url: server.url.href, duration: performance.now() - startedAt })
 
     return server
   }
@@ -290,31 +298,62 @@ const withGateways = (compiled: CompiledRoutes, gateways: readonly BuiltGateway[
   return { routes, fetch: compiled.fetch, websocket: websocketHandler }
 }
 
-/** What Nest logs at startup: the modules, then each controller and its routes. */
-const logStartup = (
-  logger: Logger,
-  container: Container,
-  controllers: readonly MappedController[],
-  gateways: readonly BuiltGateway[]
-): void => {
-  const modules = logger.child('Container')
-  const routes = logger.child('Routes')
+/** What the startup summary needs, but the URL and the duration known once listening. */
+interface Summary extends Omit<StartupReport, 'url' | 'duration'> {
+  readonly logger: Logger
+  /** `performance.now()` the duration counts from. */
+  readonly startedAt: number
+}
 
-  for (const module of container.modules) {
-    modules.log(`${module.name} dependencies initialized`)
+/** The first application of a process counts from the start of the process; one reloaded by `--hot`, from its `createApp()`. */
+let firstApp = true
+
+/** `query page, full`, `header x-key`, `cookie session`, `body` or `form`. */
+const inputsOf = (args: readonly Argument<unknown>[] | undefined): string[] => {
+  const named = new Map<string, string[]>()
+  const whole: string[] = []
+
+  for (const arg of args ?? []) {
+    if (arg.kind === 'query' || arg.kind === 'header' || arg.kind === 'cookie') {
+      named.set(arg.kind, [...(named.get(arg.kind) ?? []), arg.name])
+    } else if (arg.kind === 'body') {
+      whole.push(arg.multipart === true ? 'form' : 'body')
+    }
   }
 
-  for (const { controller, path, routes: mapped } of controllers) {
-    routes.log(`${controller.name} {${path}}:`)
+  return [...[...named].map(([kind, names]) => `${kind} ${names.join(', ')}`), ...whole]
+}
 
-    for (const { info } of mapped) {
-      routes.log(`Mapped {${info.path}, ${info.method}} route`)
+const describeRoutes = (controllers: readonly MappedController[], gateways: readonly BuiltGateway[]): StartupRoute[] => {
+  const routes: StartupRoute[] = []
+
+  for (const { routes: mapped } of controllers) {
+    for (const route of mapped) {
+      routes.push({
+        method: route.info.method.toUpperCase(),
+        path: route.info.path,
+        handler: `${route.info.controller.name}.${route.info.handler}`,
+        inputs: inputsOf(route.args),
+        guards: route.guards,
+        interceptors: route.interceptors,
+        sse: route.sse,
+      })
     }
   }
 
   for (const gateway of gateways) {
-    routes.log(`WebSocket gateway {${gateway.path}}, events: ${gateway.runtime.events.join(', ') || 'none'}`)
+    routes.push({
+      method: 'WS',
+      path: gateway.path,
+      handler: gateway.gateway.name,
+      inputs: gateway.runtime.events.length > 0 ? [gateway.runtime.events.join(', ')] : [],
+      guards: gateway.guards,
+      interceptors: [],
+      sse: false,
+    })
   }
+
+  return routes
 }
 
 /**
@@ -332,7 +371,7 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     ((error: unknown, req: Request) =>
       own.error('Unhandled error while handling a request', { error, method: req.method, url: req.url }))
 
-  own.log('Starting application')
+  const createdAt = performance.now()
 
   // Filled once the routes are built; read by what describes them (OpenAPI).
   const registry: { controllers: readonly MappedController[] } = { controllers: [] }
@@ -350,17 +389,29 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
     const built = buildRoutes(container, { ...options, onError })
 
     registry.controllers = built.controllers
-    logStartup(logger, container, built.controllers, built.gateways)
     enhancers.push(...built.enhancers)
     await initializeAll(enhancers)
-    own.log('Application started')
 
     const compiled = compileRoutes(built.routes, options)
     const routes = applyMiddleware(middleware, compiled.routes, compiled.fetch, (error, req) =>
       errorResponse(error, (unknown) => onError(unknown, req))
     )
 
-    return new Application(container, withGateways(routes, built.gateways), built.gateways, enhancers, own)
+    const summary: Summary = {
+      logger,
+      startedAt: firstApp ? 0 : createdAt,
+      version: VERSION,
+      modules: container.modules.length,
+      providers: container.providerCount,
+      middleware: (options.middleware ?? []).map(labelOf),
+      guards: (options.guards ?? []).map(labelOf),
+      interceptors: (options.interceptors ?? []).map(labelOf),
+      routes: describeRoutes(built.controllers, built.gateways),
+    }
+
+    firstApp = false
+
+    return new Application(container, withGateways(routes, built.gateways), built.gateways, enhancers, summary)
   } catch (error) {
     try {
       await destroyEverything(enhancers, container)

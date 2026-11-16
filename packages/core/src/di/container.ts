@@ -104,6 +104,8 @@ export interface Container {
   readonly controllers: readonly ControllerEntry[]
   /** Every module, imports before importers. */
   readonly modules: readonly ModuleClass[]
+  /** Number of providers of the modules. */
+  readonly providerCount: number
   /**
    * Calls `onDestroy` in reverse creation order, then releases every instance.
    * Calling it again, even from an `onDestroy` hook, returns the same promise.
@@ -417,6 +419,19 @@ class StartedContainer implements Container {
     this.#graph = graph
     this.#resolver = resolver
     this.controllers = controllers
+  }
+
+  /** Providers of the modules, those `createContainer()` adds itself left out. */
+  get providerCount(): number {
+    let count = 0
+
+    for (const node of this.#graph.providers) {
+      if (node.module.moduleClass !== ContainerProvidersModule) {
+        count++
+      }
+    }
+
+    return count
   }
 
   get modules(): readonly ModuleClass[] {

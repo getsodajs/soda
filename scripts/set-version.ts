@@ -20,4 +20,8 @@ for (const directory of PACKAGES) {
   console.log(`${path}: ${version}`)
 }
 
+// What the startup summary shows.
+await Bun.write('packages/core/src/version.ts', `/** Version of \`@getsoda/core\`, set by \`bun run release:version\`. */\nexport const VERSION = '${version}'\n`)
+console.log(`packages/core/src/version.ts: ${version}`)
+
 console.log(`\nNext: git commit -am "chore: release ${version}" && git tag -a v${version} -m v${version} && git push --follow-tags`)

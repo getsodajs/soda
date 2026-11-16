@@ -175,12 +175,12 @@ describe.each(TEMPLATES.map((template) => template.name))('generated %s project'
       for await (const chunk of server.stdout) {
         output += decoder.decode(chunk, { stream: true })
 
-        if (output.includes('Listening on')) {
+        if (output.includes('ready in')) {
           break
         }
       }
 
-      const url = /Listening on (\S+)/.exec(output)?.[1]
+      const url = /→ +(\S+)/.exec(output)?.[1]
 
       expect(url).toBeDefined()
       expect((await fetch(new URL(template === 'demo' ? '/users' : '/', url))).status).toBe(200)

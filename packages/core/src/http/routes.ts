@@ -15,6 +15,7 @@ import { InjectionToken } from '../di/index.ts'
 import type { Constructor, Container, ControllerEntry, ModuleClass } from '../di/index.ts'
 import type { RouteDefinition } from '../routing/index.ts'
 import { parsePath } from '../routing/path.ts'
+import { labelOf } from '../utils/name.ts'
 import { methodNames } from '../utils/object.ts'
 import { isThenable } from '../utils/promise.ts'
 import type { Argument } from './arguments.ts'
@@ -215,6 +216,7 @@ class RoutesBuilder {
         resolveGuard: local.guard,
         metadata: controller.metadata,
         onError: this.#onError,
+        declaredGuards: controller.guards.map(labelOf),
       })
     )
   }
@@ -253,6 +255,8 @@ class RoutesBuilder {
     // Tried the other way round: method first, global last.
     const filters = resolveAll([options.filters ?? [], controller.filters, own.filters], global.filter, local.filter).reverse()
     const routeMetadata = new Map([...controller.metadata, ...own.metadata])
+    const guardNames = [...controller.guards, ...own.guards].map(labelOf)
+    const interceptorNames = [...controller.interceptors, ...own.interceptors].map(labelOf)
 
     for (const route of metadata.routes) {
       const path = joinPaths(basePath, route.path)
@@ -265,7 +269,7 @@ class RoutesBuilder {
 
       const status = statusOf(metadata, route)
 
-      this.#mapped.push({ info, args: route.args, status, sse: route.sse })
+      this.#mapped.push({ info, args: route.args, status, sse: route.sse, guards: guardNames, interceptors: interceptorNames })
       this.routes.push({
         method: route.method,
         path,
@@ -294,6 +298,10 @@ export interface MappedRoute {
   readonly status: number
   /** Declared with `@Sse()`. */
   readonly sse: boolean
+  /** Names of the guards declared on the controller and the method, global ones left out. */
+  readonly guards: readonly string[]
+  /** Names of the interceptors declared on the controller and the method. */
+  readonly interceptors: readonly string[]
 }
 
 /** A controller and the routes made from it. */

@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { inject, Module } from '../di/index.ts'
 import type { OnDestroy, OnInit } from '../di/index.ts'
-import { Controller, Get, Post, UseGuards } from '../http/index.ts'
-import type { CanActivate } from '../http/index.ts'
+import { body, Controller, cors, Get, header, param, Post, query, Sse, UseGuards, UseInterceptors } from '../http/index.ts'
+import type { CanActivate, Interceptor } from '../http/index.ts'
 import { Logger } from '../logger/index.ts'
-import type { LogEntry } from '../logger/index.ts'
+import type { LogEntry, StartupReport } from '../logger/index.ts'
+import { VERSION } from '../version.ts'
 import { createApp } from './app.ts'
 
 const SOURCE = join(import.meta.dir, '..')
@@ -356,16 +357,67 @@ describe('logger', () => {
     const failure = logger.entries.at(-1)!
 
     expect(logger.entries.map(({ level, context, message }) => `${level} [${context}] ${message}`)).toEqual([
-      'log [Soda] Starting application',
-      'log [Container] ReportingModule dependencies initialized',
-      'log [Container] AppModule dependencies initialized',
-      'log [Routes] FailingController {/fail}:',
-      'log [Routes] Mapped {/fail, GET} route',
-      'log [Soda] Application started',
       `log [Soda] Listening on ${server.url.href}`,
+      'debug [Soda] GET /fail → FailingController.fail',
       'error [Soda] Unhandled error while handling a request',
     ])
+    expect(logger.entries[0]!.data).toMatchObject({ modules: 2, providers: 1, routes: 1 })
     expect(failure.data).toMatchObject({ method: 'GET', url: `${server.url.origin}/fail` })
     expect((failure.data!.error as Error).message).toBe('broken')
+  })
+
+  it('reports what each route reads and its guards and interceptors once listening, and nothing before', async () => {
+    const reports: StartupReport[] = []
+
+    class ReportLogger extends Logger {
+      write(): void {}
+
+      override startup(report: StartupReport): void {
+        reports.push(report)
+      }
+    }
+
+    class JwtGuard implements CanActivate {
+      canActivate(): boolean {
+        return true
+      }
+    }
+
+    const everywhere: CanActivate = { canActivate: () => true }
+    const timing: Interceptor = { intercept: (_ctx, next) => next() }
+
+    @Controller('/users')
+    @UseGuards(JwtGuard)
+    class UsersController {
+      @Get(':id', [param('id'), query('full'), query('fields'), header('x-key')])
+      findOne(): void {}
+
+      @Post('', [body()])
+      @UseInterceptors(timing)
+      create(): void {}
+
+      @Sse('events')
+      async *events(): AsyncGenerator<number> {}
+    }
+
+    @Module({ controllers: [UsersController] })
+    class AppModule {}
+
+    const app = await createApp(AppModule, { logger: new ReportLogger(), guards: [everywhere], middleware: [cors()] })
+
+    expect(reports).toEqual([])
+
+    const server = await app.listen(0)
+
+    await app.close()
+
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ version: VERSION, url: server.url.href, modules: 1, providers: 0, middleware: ['cors'], guards: ['anonymous'] })
+    expect(reports[0]!.duration).toBeGreaterThan(0)
+    expect(reports[0]!.routes).toEqual([
+      { method: 'GET', path: '/users/:id', handler: 'UsersController.findOne', inputs: ['query full, fields', 'header x-key'], guards: ['JwtGuard'], interceptors: [], sse: false },
+      { method: 'POST', path: '/users', handler: 'UsersController.create', inputs: ['body'], guards: ['JwtGuard'], interceptors: ['anonymous'], sse: false },
+      { method: 'GET', path: '/users/events', handler: 'UsersController.events', inputs: [], guards: ['JwtGuard'], interceptors: [], sse: true },
+    ])
   })
 })

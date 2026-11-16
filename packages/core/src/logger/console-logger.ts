@@ -3,17 +3,22 @@
  * Logger writing to stdout and stderr, readable for people or as JSON lines.
  *
  * ```
- * [Soda] 41250  - 11/14/2026, 12:22:09 AM     LOG [UsersService] User created {"id":7} +3ms
+ * 12:22:09 LOG UsersService  User created id=7 +3ms
  * {"time":"2026-11-13T21:22:09.120Z","level":"log","context":"UsersService","message":"User created","id":7}
  * ```
  *
- * Like Nest's `ConsoleLogger`: the same line layout, colored by level in a
- * terminal, with the time since the previous line; a minimum level; a JSON
- * mode for log collectors. `error` and `fatal` go to stderr, the rest to stdout.
+ * The time, the level, the context, then the message and its data as
+ * `key=value`, and the time since the previous line. Colored in a terminal, in
+ * Soda's palette. When the application listens, a summary of it: figures,
+ * routes with what they read and their guards. `error` and `fatal` go to
+ * stderr, the rest to stdout.
  */
 
 import { Logger } from './logger.ts'
-import type { LogEntry, LogLevel } from './logger.ts'
+import type { LogEntry, LogLevel, StartupReport } from './logger.ts'
+import { colors, PLAIN } from './palette.ts'
+import type { Palette } from './palette.ts'
+import { drawStartup } from './startup.ts'
 
 export interface ConsoleLoggerOptions {
   /** Least severe level written. Defaults to `log`. */
@@ -23,40 +28,36 @@ export interface ConsoleLoggerOptions {
   /** Where lines go. Defaults to stderr for `error` and `fatal`, stdout otherwise. */
   readonly output?: (line: string, level: LogLevel) => void
   /**
-   * Colors by level. Defaults to on when writing to a terminal without
-   * `NO_COLOR`, off with a custom `output`.
+   * Colors. Defaults to on when writing to a terminal without `NO_COLOR`, off
+   * with a custom `output`.
    */
   readonly colors?: boolean
-  /** Name starting each readable line. Defaults to `Soda`. */
+  /** Name starting each readable line, to tell applications apart in one stream: `[Shop]`. None by default. */
   readonly prefix?: string
 }
 
 const SEVERITY: Readonly<Record<LogLevel, number>> = { verbose: 0, debug: 1, log: 2, warn: 3, error: 4, fatal: 5 }
 
-const color =
-  (code: string) =>
-  (text: string): string =>
-    `\u001B[${code}m${text}\u001B[0m`
-
-const LEVEL_COLORS: Readonly<Record<LogLevel, (text: string) => string>> = {
-  verbose: color('96'),
-  debug: color('95'),
-  log: color('32'),
-  warn: color('33'),
-  error: color('31'),
-  fatal: color('1;31'),
+const LABELS: Readonly<Record<LogLevel, string>> = {
+  verbose: 'VRB',
+  debug: 'DBG',
+  log: 'LOG',
+  warn: 'WRN',
+  error: 'ERR',
+  fatal: 'FTL',
 }
-const yellow = color('38;5;3')
-const plain = (text: string): string => text
 
-const dateTime = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: 'numeric',
-  minute: '2-digit',
-  second: '2-digit',
-})
+const two = (n: number): string => (n < 10 ? `0${n}` : String(n))
+
+/** `12:22:09`, local time. */
+const clock = (now: number): string => {
+  const date = new Date(now)
+
+  return `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`
+}
+
+/** Values written without quotes: `id=7`, `path=/users/7`. */
+const BARE = /^[\w.:/@+-]+$/
 
 const writeToConsole = (line: string, level: LogLevel): void => {
   const stream = level === 'error' || level === 'fatal' ? process.stderr : process.stdout
@@ -104,11 +105,34 @@ const stringify = (value: unknown, errors: 'full' | 'brief'): string => {
   })
 }
 
+/** A value of `key=value`: strings quoted when they have spaces, objects as JSON, errors as `Name: message`. */
+const writeValue = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return BARE.test(value) ? value : JSON.stringify(value)
+  }
+
+  if (value instanceof Error) {
+    return `${value.name}: ${value.message}`
+  }
+
+  return typeof value === 'object' && value !== null ? stringify(value, 'brief') : String(value)
+}
+
+const pairs = (data: Readonly<Record<string, unknown>>, palette: Palette): string => {
+  let text = ''
+
+  for (const key of Object.keys(data)) {
+    text += ` ${palette.dim(`${key}=`)}${writeValue(data[key])}`
+  }
+
+  return text
+}
+
 export class ConsoleLogger extends Logger {
   readonly #minimum: number
   readonly #json: boolean
   readonly #output: (line: string, level: LogLevel) => void
-  readonly #colors: boolean
+  readonly #palette: Palette
   readonly #prefix: string
   /** When the previous line was written, for the `+3ms` at the end of the next. */
   #last: number | undefined
@@ -118,8 +142,11 @@ export class ConsoleLogger extends Logger {
     this.#minimum = SEVERITY[options.level ?? 'log']
     this.#json = options.json === true
     this.#output = options.output ?? writeToConsole
-    this.#colors = options.colors ?? (options.output === undefined && process.stdout.isTTY === true && process.env.NO_COLOR === undefined)
-    this.#prefix = options.prefix ?? 'Soda'
+    this.#palette =
+      (options.colors ?? (options.output === undefined && process.stdout.isTTY === true && process.env.NO_COLOR === undefined))
+        ? colors()
+        : PLAIN
+    this.#prefix = options.prefix === undefined ? '' : `[${options.prefix}] `
   }
 
   write(entry: LogEntry): void {
@@ -133,6 +160,22 @@ export class ConsoleLogger extends Logger {
     this.#last = now
   }
 
+  /** The summary of the application, written as a `log` entry; JSON lines get the entries of `Logger`. */
+  override startup(report: StartupReport): void {
+    if (this.#json) {
+      super.startup(report)
+
+      return
+    }
+
+    if (SEVERITY.log < this.#minimum) {
+      return
+    }
+
+    this.#output(drawStartup(report, this.#palette), 'log')
+    this.#last = Date.now()
+  }
+
   #formatJson(entry: LogEntry, now: number): string {
     const time = new Date(now).toISOString()
 
@@ -141,23 +184,23 @@ export class ConsoleLogger extends Logger {
   }
 
   #formatText(entry: LogEntry, now: number): string {
-    const level = this.#colors ? LEVEL_COLORS[entry.level] : plain
-    const accent = this.#colors ? yellow : plain
-    const context = entry.context === undefined ? '' : accent(`[${entry.context}] `)
-    const since = this.#last === undefined ? '' : accent(` +${now - this.#last}ms`)
-    const data = entry.data === undefined ? '' : ` ${stringify(entry.data, 'brief')}`
-    const line =
-      `${level(`[${this.#prefix}] ${process.pid}  - `)}${dateTime.format(now)} ${level(entry.level.toUpperCase().padStart(7))} ` +
-      `${context}${level(entry.message)}${data}${since}`
+    const palette = this.#palette
+    const { dim } = palette
+    const level = palette.level[entry.level]
+    const severe = SEVERITY[entry.level] >= SEVERITY.warn
+    const context = entry.context === undefined ? '' : `${palette.aqua(entry.context)}  `
+    const message = severe ? level(entry.message) : entry.message
+    const data = entry.data === undefined ? '' : pairs(entry.data, palette)
+    const since = this.#last === undefined ? '' : dim(` +${now - this.#last}ms`)
     let stacks = ''
 
-    // Stacks are read better on their own lines than inside the JSON.
+    // Stacks are read better on their own lines.
     for (const value of Object.values(entry.data ?? {})) {
       if (value instanceof Error && value.stack !== undefined) {
-        stacks += `\n${value.stack}`
+        stacks += `\n${dim(value.stack)}`
       }
     }
 
-    return line + stacks
+    return `${this.#prefix}${dim(clock(now))} ${level(LABELS[entry.level])} ${context}${message}${data}${since}${stacks}`
   }
 }

@@ -98,7 +98,7 @@ export const cors = (options: CorsOptions = {}): MiddlewareFunction => {
     }
   }
 
-  return async (req, next) => {
+  const middleware: MiddlewareFunction = async (req, next) => {
     const requested = req.headers.get('origin')
     const preflight = req.method === 'OPTIONS' && requested !== null && req.headers.has('access-control-request-method')
 
@@ -140,4 +140,7 @@ export const cors = (options: CorsOptions = {}): MiddlewareFunction => {
 
     return response
   }
+
+  // Listed as `cors` in the startup summary.
+  return Object.defineProperty(middleware, 'name', { value: 'cors' })
 }
