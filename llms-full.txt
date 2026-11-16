@@ -1,0 +1,2001 @@
+# Soda
+
+> Soda (SodaJS, npm package @getsoda/core) is a class-based web framework for Bun: modules, dependency injection, controllers, guards, interceptors and exception filters written with standard TC39 decorators, compiled into Bun's native router. Requires Bun 1.4 or later.
+
+- Create a project: `bun create soda my-app`. Add to an existing one: `bun add @getsoda/core`.
+- Standard decorators: no `experimentalDecorators`, no `emitDecoratorMetadata`, no `reflect-metadata`.
+- Dependencies come from `inject()`. A route lists its arguments in its decorator: `@Get(':id', [param('id', int)])`.
+- Validation with any Standard Schema library (zod, valibot, arktype); OpenAPI is generated from the same schemas.
+- Entry points: `@getsoda/core`, `@getsoda/core/jwt`, `@getsoda/core/throttler`, `@getsoda/core/openapi`, `@getsoda/core/testing`.
+- Soda is 0.x: the API may change between minor versions.
+
+---
+
+# Getting started
+
+## Requirements
+
+Bun 1.4 or later. No TypeScript flags are needed: Soda uses standard decorators, not `experimentalDecorators`.
+
+## Create a project
+
+```bash
+bun create soda my-app
+cd my-app
+bun dev
+```
+
+`bun create soda` asks for the directory, the template and whether to install dependencies. Two templates exist:
+
+| Template | |
+|---|---|
+| `minimal` | a module, a controller, a service and a test; the default |
+| `demo` | configuration, login with JWT in an httpOnly cookie, users with validation, CORS, tests |
+
+Without a terminal, or in CI:
+
+```bash
+bun create soda my-app --template demo --install --no-interactive
+```
+
+Open <http://localhost:3000>: the application answers `Hello Soda!`.
+
+## What is in it
+
+```
+src/
+  main.ts            creates the application and listens
+  app.module.ts      the root module
+  app.controller.ts  routes
+  app.service.ts     what the routes use
+  app.test.ts        a test over HTTP
+```
+
+`main.ts` starts everything:
+
+```ts
+import { createApp } from '@getsoda/core'
+import { AppModule } from './app.module.ts'
+
+const app = await createApp(AppModule)
+
+app.enableShutdownSignals() // close gracefully on SIGTERM and SIGINT
+await app.listen(Number(process.env.PORT ?? 3000))
+```
+
+A module lists its providers and controllers:
+
+```ts
+@Module({ providers: [AppService], controllers: [AppController] })
+export class AppModule {}
+```
+
+A controller gets what it needs with `inject()`, and declares routes on its methods:
+
+```ts
+@Controller()
+export class AppController {
+  readonly #app = inject(AppService)
+
+  @Get()
+  getHello(): string {
+    return this.#app.getHello()
+  }
+}
+```
+
+At startup Soda logs the modules, the controllers and each route, as Nest does.
+
+## Scripts
+
+| Script | |
+|---|---|
+| `bun dev` | runs with `bun --hot`: changes apply without a restart |
+| `bun run debug` | the same, with the inspector |
+| `bun start` | runs the sources |
+| `bun run build` | bundles into `dist/main.js` |
+| `bun run start:prod` | runs the bundle |
+| `bun test`, `test:watch`, `test:cov` | tests, with coverage for `test:cov` |
+| `bun run typecheck` | `bun check` |
+| `bun run lint`, `lint:fix` | oxlint |
+
+## Your first resource
+
+A service holding users:
+
+```ts
+// src/users/users.service.ts
+export interface User {
+  readonly id: number
+  readonly name: string
+}
+
+export class UsersService {
+  readonly #users = new Map<number, User>()
+
+  find(id: number): User | undefined {
+    return this.#users.get(id)
+  }
+
+  create(name: string): User {
+    const user = { id: this.#users.size + 1, name }
+
+    this.#users.set(user.id, user)
+
+    return user
+  }
+}
+```
+
+A controller: the route decorator lists the arguments the method receives, read and validated before it runs.
+
+```ts
+// src/users/users.controller.ts
+import { body, Controller, Get, inject, int, NotFoundException, param, Post } from '@getsoda/core'
+import { z } from 'zod'
+import { UsersService } from './users.service.ts'
+import type { User } from './users.service.ts'
+
+const CreateUser = z.object({ name: z.string().min(1) })
+
+@Controller('users')
+export class UsersController {
+  readonly #users = inject(UsersService)
+
+  @Get(':id', [param('id', int)])
+  findOne(id: number): User {
+    const user = this.#users.find(id)
+
+    if (user === undefined) {
+      throw new NotFoundException(`No user ${id}`)
+    }
+
+    return user
+  }
+
+  @Post([body(CreateUser)])
+  create(input: z.infer<typeof CreateUser>): User {
+    return this.#users.create(input.name)
+  }
+}
+```
+
+A module for them, imported by the root module:
+
+```ts
+// src/users/users.module.ts
+@Module({ providers: [UsersService], controllers: [UsersController] })
+export class UsersModule {}
+
+// src/app.module.ts
+@Module({ imports: [UsersModule], providers: [AppService], controllers: [AppController] })
+export class AppModule {}
+```
+
+```bash
+curl -X POST localhost:3000/users -H 'content-type: application/json' -d '{"name":"Ann"}'
+# {"id":1,"name":"Ann"}
+curl localhost:3000/users/1
+# {"id":1,"name":"Ann"}
+curl localhost:3000/users/abc
+# {"statusCode":400,"message":"Validation failed for \"id\" (integer string is expected)","error":"Bad Request"}
+```
+
+Next: [Controllers](https://getsodajs.github.io/soda/docs/controllers.md).
+
+Source: https://getsodajs.github.io/soda/docs/getting-started/
+
+---
+
+# Controllers
+
+A controller is a class whose methods serve routes. List it in the `controllers` of a module.
+
+```ts
+@Controller('users')
+export class UsersController {
+  @Get()
+  list(): User[] {}
+
+  @Get(':id', [param('id', int)])
+  findOne(id: number): User {}
+
+  @Post([body(CreateUser)])
+  create(input: CreateUser): User {}
+
+  @Delete(':id', [param('id', int)])
+  @HttpCode(204)
+  remove(id: number): void {}
+}
+```
+
+## Routes
+
+`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Options` and `@Head` declare a route for their method; `@All` for every method; `@Route('PROPFIND', 'path')` for any other method name. A method may carry several route decorators.
+
+The full path is the global prefix, the controller path and the route path, each with a leading slash and no trailing one:
+
+```ts
+await createApp(AppModule, { prefix: 'api' })
+
+@Controller('users')   // + @Get(':id')  →  /api/users/:id
+```
+
+- `HEAD` is answered by the `GET` route unless a `@Head` route exists.
+- A path with routes, but none for the method, answers `405` with an `Allow` header.
+- A route for a concrete method wins over an `@All` route on the same path.
+- A controller inherits the routes of its parent class; an override without a route decorator removes the route.
+
+### Path syntax
+
+Each special form takes a whole segment:
+
+| Path | Matches |
+|---|---|
+| `/users/me` | that path |
+| `/users/:id` | one non-empty segment, as `id` |
+| `/users/:id{\\d+}` | a segment matching the regex, tested on the decoded value |
+| `/users/:id?` | with or without the last segment; only trailing parameters are optional |
+| `/files/*` | `/files` and everything below |
+| `/files/*path` | the same, the decoded remainder as `path` |
+
+Routes compile into Bun's native router. Two routes that can match the same request (the same path written twice, say) stop the startup with an error naming both.
+
+## Arguments
+
+The second argument of a route decorator lists what the method receives, in order. Each value is read, converted and validated before the method runs; a failure answers `400` without calling it.
+
+```ts
+@Get(':id', [param('id', int), query('fields'), header('accept-language')])
+findOne(id: number, fields: string | undefined, language: string | undefined) {}
+```
+
+| Argument | Value | Nest |
+|---|---|---|
+| `param(name, parser?)` | path parameter, of the route or of the controller path | `@Param()` |
+| `query(name, parser?)` | first value of a query parameter | `@Query()` |
+| `header(name, parser?)` | request header | `@Headers()` |
+| `cookie(name, parser?)` | cookie | `@Cookies()` |
+| `body(schema?)` | JSON body | `@Body()` |
+| `form(schema?, limits?)` | form body, files included | `@Body()` with multer |
+| `value(key)` | what a guard or an interceptor attached to the request | custom decorator, `@User()` |
+| `context()` | the request context itself | `@Req()` |
+
+The types are checked: `findOne(id: string)` after `param('id', int)` is a compile error, and so is a method that does not accept what the list gives. A `param()` name that is not in the full path stops the startup and lists the parameters the path has.
+
+Without parser, `param('id')` is a `string`, `string | undefined` for an optional parameter; `query()`, `header()` and `cookie()` are `string | undefined`. Parsers and schemas are in [Validation](https://getsodajs.github.io/soda/docs/validation.md).
+
+## The context
+
+A route without argument list receives the request context, typed by its path:
+
+```ts
+@Get(':id')
+findOne(ctx: Context<':id'>) {
+  return this.#users.find(ctx.param('id'))
+}
+```
+
+| Member | |
+|---|---|
+| `ctx.req` | Bun's `Request` |
+| `ctx.param(name, parser?)`, `query()`, `header()`, `cookie()` | as the arguments above |
+| `ctx.body(schema?)`, `ctx.form(schema?, limits?)` | the body; read once, in one format |
+| `ctx.cookies` | Bun's `CookieMap`; what you set or delete is sent with the response |
+| `ctx.responseHeaders` | headers added to the response, whatever it is |
+| `ctx.url` | the parsed `URL`, built on first use |
+| `ctx.ip` | address of the peer |
+| `ctx.get(key)`, `ctx.set(key, value)`, `ctx.has(key)` | values attached to the request, see [Request pipeline](https://getsodajs.github.io/soda/docs/request-pipeline.md) |
+| `ctx.metadata(decorator)` | custom metadata of the route |
+| `ctx.route` | controller, method name, HTTP method, full path |
+
+Prefer the argument list: it is what the types, OpenAPI and the startup checks see. `context()` in the list gives the context next to other values, for cookies or response headers.
+
+## Responses
+
+What the method returns becomes the response, as in Nest:
+
+| Returned | Response |
+|---|---|
+| a `Response` | sent as is |
+| `undefined`, `null` | empty body |
+| a string | `text/plain;charset=utf-8` |
+| `ArrayBuffer`, typed array, `Blob`, `ReadableStream` | sent as is |
+| anything else | JSON |
+
+The status is `201` for `POST` and `200` otherwise; `@HttpCode(204)` changes it. `204`, `205` and `304` never get a body. `@Header(name, value)` adds a header to the responses built from returned values. A returned `Response` keeps its own status and headers.
+
+Errors are responses too: throw an `HttpException` and its body is sent with its status.
+
+```ts
+throw new NotFoundException(`No user ${id}`)
+// 404 {"statusCode":404,"message":"No user 1","error":"Not Found"}
+```
+
+`BadRequestException` (400), `UnauthorizedException` (401), `ForbiddenException` (403), `NotFoundException` (404), `ConflictException` (409), `PayloadTooLargeException` (413), `UnsupportedMediaTypeException` (415), `UnprocessableEntityException` (422), `TooManyRequestsException` (429), `InternalServerErrorException` (500) and `ServiceUnavailableException` (503) exist; `new HttpException(body, status)` makes any other. Any other error is logged and answered with a bare `500`, whose body says nothing about it.
+
+## Server-sent events
+
+An `@Sse()` route returns an async iterable of messages, streamed as `text/event-stream`:
+
+```ts
+@Sse('ticks')
+async *ticks(): AsyncGenerator<SseMessage> {
+  for (let i = 0; ; i++) {
+    yield { data: { tick: i }, id: String(i) } // data: a string as is, anything else as JSON
+    await Bun.sleep(1000)
+  }
+}
+```
+
+A message may also have an `event` name and a `retry` delay in milliseconds. When the client disconnects, the generator is returned, so its `finally` runs: release what it holds there. The response carries Nest's headers: no caching, no buffering by nginx.
+
+```ts
+const source = new EventSource('/ticks')
+source.onmessage = (event) => console.log(JSON.parse(event.data))
+```
+
+Source: https://getsodajs.github.io/soda/docs/controllers/
+
+---
+
+# Validation
+
+Soda validates with any [Standard Schema](https://standardschema.dev) library: zod, valibot, arktype and others. No DTO classes, no `class-validator`: the schema is the type.
+
+```ts
+import { z } from 'zod'
+
+const CreateUser = z.object({
+  name: z.string().min(1),
+  email: z.email(),
+  age: z.number().int().optional(),
+})
+
+@Post([body(CreateUser)])
+create(input: z.infer<typeof CreateUser>) {}
+```
+
+## Bodies
+
+`body(schema)` reads the JSON body and validates it.
+
+| Request | Response |
+|---|---|
+| a content type other than JSON | `415` |
+| invalid JSON | `400 Request body is not valid JSON` |
+| a `__proto__` key, written plainly or escaped | `400`: prototype pollution is refused |
+| a body the schema refuses | `400`, every issue listed |
+
+```json
+{
+  "statusCode": 400,
+  "message": ["name: Too small: expected string to have >=1 characters", "email: Invalid email address"],
+  "error": "Bad Request"
+}
+```
+
+Each issue is `path: message`, the messages of your schema library. A very long list is cut, the last entry saying so.
+
+`body()` without schema gives the parsed JSON as `unknown`. Body schemas may validate asynchronously (a check against the database, say); the others must be synchronous.
+
+## Path, query and header values
+
+Path parameters, query parameters, headers and cookies are strings. Parsers convert them and answer `400` when they do not fit:
+
+| Parser | Accepts | Gives | Nest |
+|---|---|---|---|
+| `int` | `-42`, within `Number.MAX_SAFE_INTEGER` | `number` | `ParseIntPipe` |
+| `number` | `1.5`, `-2`, `1e3`, finite | `number` | `ParseFloatPipe` |
+| `boolean` | `true`, `false` | `boolean` | `ParseBoolPipe` |
+| `uuid` | a UUID of any version, any case | `string` | `ParseUUIDPipe` |
+
+```ts
+@Get(':id', [param('id', int), query('full', boolean.optional())])
+findOne(id: number, full: boolean | undefined) {}
+```
+
+A value is required: without it, the request is a `400`. `.optional()` accepts a missing value as `undefined`; a present but invalid one is still a `400`. Unlike `ParseIntPipe`, `int` refuses `99999999999999999999` instead of rounding it.
+
+Any schema works in place of a parser, over the string:
+
+```ts
+query('sort', z.enum(['asc', 'desc']))
+query('page', z.coerce.number().int().min(1).default(1))
+param('slug', z.string().regex(/^[a-z0-9-]+$/))
+```
+
+## Forms and files
+
+`form()` reads `multipart/form-data` and `application/x-www-form-urlencoded` bodies; another content type is a `415`.
+
+```ts
+const Profile = z.object({
+  name: z.string(),
+  avatar: z.instanceof(File),
+})
+
+@Post('profile', [form(Profile, { maxFileSize: 2 * 1024 * 1024, maxFiles: 1 })])
+update(profile: z.infer<typeof Profile>) {}
+```
+
+- A repeated field, or a field named `tags[]`, is an array.
+- Files are `File` objects. Their `type` is what the client declared: check the content itself when it matters.
+- Limits answer `413` past them: `maxBodySize` (bytes of the body, refused as soon as it is exceeded, before it is read entirely), `maxFileSize`, `maxFiles` and `maxFields`.
+
+`form(limits)` without schema gives the fields as they are. See also [File uploads](https://getsodajs.github.io/soda/docs/recipes/file-uploads.md).
+
+## Signed cookies
+
+`signed(signer)` checks a cookie's signature, as a parser: see [Authentication](https://getsodajs.github.io/soda/docs/authentication.md#cookies).
+
+## Writing a parser
+
+A parser turns a raw value, `undefined` when absent, into a value or throws an `HttpException`. `jsonSchema` describes it in OpenAPI.
+
+```ts
+import { BadRequestException } from '@getsoda/core'
+import type { Parser } from '@getsoda/core'
+
+const date: Parser<Date> = {
+  jsonSchema: { type: 'string', format: 'date' },
+  parse: (value, name) => {
+    const parsed = value === undefined ? Number.NaN : Date.parse(value)
+
+    if (Number.isNaN(parsed)) {
+      throw new BadRequestException(`Validation failed for "${name}" (date is expected)`)
+    }
+
+    return new Date(parsed)
+  },
+}
+
+@Get([query('since', date)])
+list(since: Date) {}
+```
+
+Most of the time a schema is simpler: `z.coerce.date()`.
+
+Source: https://getsodajs.github.io/soda/docs/validation/
+
+---
+
+# Providers and modules
+
+## Injecting
+
+A class gets its dependencies with `inject()`, in a field initializer or its constructor:
+
+```ts
+export class UsersService {
+  readonly #repository = inject(UsersRepository)
+  readonly #logger = inject(Logger).child('UsersService')
+}
+```
+
+No constructor parameters, no `reflect-metadata`: the token is written, not read from types the compiler emits. Private fields (`#name`) work, and `import type` cannot break injection.
+
+`inject()` works while the container creates a class: in field initializers and constructors, in factories, and in function guards, interceptors and middleware (before their first `await`). Called anywhere else, it throws and says so.
+
+`inject(Logger, { optional: true })` gives `undefined` when no provider is visible.
+
+## Providers
+
+A module lists providers either as a class, or with `provide()`:
+
+```ts
+@Module({
+  providers: [
+    UsersService,                                               // the class itself
+    provide(DATABASE_URL, { useValue: process.env.DATABASE_URL }),
+    provide(Mailer, { useClass: SmtpMailer }),                  // another class for the token
+    provide(Cache, { useExisting: RedisCache }),                // an alias
+    provide(Database, {
+      inject: [DATABASE_URL, optional(Logger)],
+      useFactory: async (url, logger) => connect(url, logger),  // may be async
+    }),
+  ],
+})
+export class DatabaseModule {}
+```
+
+`provide()` checks each definition against the token type: a `useValue` that is not a `Database` does not compile.
+
+A token is a class, or an `InjectionToken` for anything else:
+
+```ts
+export const DATABASE_URL = new InjectionToken<string>('DATABASE_URL')
+
+readonly #url = inject(DATABASE_URL) // string
+```
+
+### Scopes
+
+| Scope | |
+|---|---|
+| `singleton` | the default: one instance, created at startup |
+| `transient` | a new instance for each injection |
+
+```ts
+@Injectable({ scope: 'transient' })
+export class Timer {}
+```
+
+There is no request scope: data of a request travels in its context (`ctx.set()`, `value()`), which keeps the graph static and costs nothing per request. See [Request pipeline](https://getsodajs.github.io/soda/docs/request-pipeline.md#values-of-a-request).
+
+## Modules
+
+```ts
+@Module({
+  imports: [DatabaseModule],      // modules whose exports this one sees
+  providers: [UsersService],
+  controllers: [UsersController],
+  exports: [UsersService],        // what modules importing this one see
+})
+export class UsersModule {}
+```
+
+A provider is visible in its module and in the modules importing one that exports it. A module may export a module it imports, re-exporting what that one exports.
+
+`global: true` makes the exports of a module visible everywhere, without imports. Keep it for what truly is everywhere: configuration, the logger, a database.
+
+### Dynamic modules
+
+A static method returns a module configured at runtime, as `forRoot()` does in Nest:
+
+```ts
+@Module({})
+export class MailModule {
+  static forRoot(options: MailOptions): DynamicModule {
+    return {
+      module: MailModule,
+      providers: [provide(MAIL_OPTIONS, { useValue: options }), Mailer],
+      exports: [Mailer],
+    }
+  }
+}
+
+@Module({ imports: [MailModule.forRoot({ from: 'hello@example.com' })] })
+export class AppModule {}
+```
+
+Its fields add to those of the `@Module()` decorator. `imports` also accepts a promise of a dynamic module, for options loaded asynchronously.
+
+## Lifecycle
+
+```ts
+export class Database implements OnInit, OnDestroy {
+  readonly #sql = new SQL(process.env.DATABASE_URL!)
+
+  async onInit() {
+    await this.#sql`select 1` // fail at startup, not at the first request
+  }
+
+  async onDestroy() {
+    await this.#sql.close()
+  }
+}
+```
+
+- `onInit` runs once every singleton exists, dependencies first; the application starts after it.
+- `onDestroy` runs when the application closes, dependents first, after the requests in flight have ended.
+
+Hooks run on classes, factory results and `useValue` objects alike, one after another.
+
+## Errors at startup
+
+The graph is checked when the application starts. A missing provider says which class needs it, through which chain, and how to fix it:
+
+```
+DiError: No provider for UsersRepository in UsersModule (UsersService → UsersRepository). Add it to the providers of UsersModule, or import a module that exports it.
+    at new UsersService (src/users/users.service.ts:4:24)
+```
+
+Cycles, a provider that is not exported, two providers of one token in a module and an override that replaces nothing are reported the same way, pointing to your code, not to the framework's.
+
+## Outside HTTP
+
+`createContainer()` builds the graph alone, for scripts, workers and tests:
+
+```ts
+const container = await createContainer(AppModule)
+const users = container.get(UsersService)
+
+await container.close()
+```
+
+Source: https://getsodajs.github.io/soda/docs/providers-and-modules/
+
+---
+
+# Request pipeline
+
+```
+middleware → routing → guards → interceptors → arguments → handler → response
+                          └──── exception filters (method, class, global) ────┘
+```
+
+Guards, interceptors and filters are what Nest calls enhancers. They are declared globally, on a controller or on a method, and run in Nest's order: global first, then class, then method; filters the other way round.
+
+Each one comes in three forms:
+
+- **a class**, created once per module by the container, so it can `inject()` what the controller's module sees;
+- **an instance**, used as is;
+- **a function**, run where `inject()` works.
+
+## Guards
+
+A guard decides whether a request goes on. Returning `false` answers `403 Forbidden resource`; throwing an `HttpException` answers with it.
+
+```ts
+export class ApiKeyGuard implements CanActivate {
+  readonly #config = inject(AppConfig)
+
+  canActivate(ctx: Context): boolean {
+    return ctx.header('x-api-key') === this.#config.API_KEY
+  }
+}
+
+@Controller('admin')
+@UseGuards(ApiKeyGuard)
+export class AdminController {}
+```
+
+A function works too:
+
+```ts
+const internalOnly = (ctx: Context) => ctx.ip === '127.0.0.1'
+
+@Get('metrics')
+@UseGuards(internalOnly)
+metrics() {}
+```
+
+Global guards: `createApp(AppModule, { guards: [ApiKeyGuard] })`; their classes are created in the root module.
+
+## Values of a request
+
+A guard that finds something (the user, the tenant) attaches it to the request under a `ContextKey`; the handler receives it with `value()`:
+
+```ts
+export const USER = new ContextKey<User>('user')
+
+export class AuthGuard implements CanActivate {
+  readonly #auth = inject(AuthService)
+
+  async canActivate(ctx: Context): Promise<boolean> {
+    const user = await this.#auth.verify(ctx.header('authorization'))
+
+    ctx.set(USER, user)
+
+    return true
+  }
+}
+
+@Get('me', [value(USER)])
+@UseGuards(AuthGuard)
+me(user: User) {}
+```
+
+The key carries the type, and two keys never collide. Reading a key nobody set throws an error saying the guard is probably missing on the route; `new ContextKey('locale', () => 'en')` has a default instead.
+
+## Custom metadata
+
+`createDecorator()` makes a decorator storing a value on a class or a method; a guard reads it with `ctx.metadata()`, the method's value over the class's. This is Nest's `Reflector`:
+
+```ts
+export const Roles = createDecorator<readonly string[]>('Roles')
+
+export class RolesGuard implements CanActivate {
+  canActivate(ctx: Context): boolean {
+    const roles = ctx.metadata(Roles)
+
+    return roles === undefined || roles.includes(ctx.get(USER).role)
+  }
+}
+
+@Delete(':id', [param('id', int)])
+@Roles(['admin'])
+@UseGuards(AuthGuard, RolesGuard)
+remove(id: number) {}
+```
+
+## Interceptors
+
+An interceptor wraps the handler: it works before `next()`, after it, instead of it, or changes its result. `next()` is a promise of what the handler returned; there is no RxJS.
+
+```ts
+export class TimingInterceptor implements Interceptor {
+  readonly #logger = inject(Logger).child('Timing')
+
+  async intercept(ctx: Context, next: CallHandler) {
+    const start = performance.now()
+    const result = await next()
+
+    this.#logger.log(`${ctx.route.method} ${ctx.route.path}`, { ms: performance.now() - start })
+
+    return result
+  }
+}
+
+@UseInterceptors(TimingInterceptor)
+```
+
+Interceptors run after the guards, so a refused request never reaches them.
+
+## Exception filters
+
+A filter turns an error into the response to send. `@Catch()` says which errors a class handles; without arguments, all of them.
+
+```ts
+@Catch(EntityNotFoundError)
+export class NotFoundFilter implements ExceptionFilter<EntityNotFoundError> {
+  catch(error: EntityNotFoundError, ctx: Context): Response {
+    return Response.json({ statusCode: 404, message: error.message }, { status: 404 })
+  }
+}
+
+@UseFilters(NotFoundFilter)
+```
+
+The first filter that handles the error answers, the method's first, then the class's, then the global ones. Without one, an `HttpException` is sent as its body and status, and any other error is passed to `onError` (logged by default) and answered with a bare `500`. A filter that fails falls back to that too.
+
+## Response headers
+
+`ctx.responseHeaders` adds headers to the response, whatever it is: a returned value, a returned `Response`, or an error. Like `res.header()` in Nest.
+
+```ts
+const noStore = (ctx: Context) => {
+  ctx.responseHeaders.set('cache-control', 'no-store')
+
+  return true
+}
+```
+
+`@Header(name, value)` on a method is simpler for a fixed header.
+
+## Middleware
+
+Middleware runs around every request before routing: unknown paths (404), wrong methods (405) and CORS preflights included. It is the place for what concerns HTTP itself: CORS, request ids, access logs, compression.
+
+```ts
+const requestId: MiddlewareFunction = async (req, next) => {
+  const response = await next()
+
+  response.headers.set('x-request-id', crypto.randomUUID())
+
+  return response
+}
+
+await createApp(AppModule, { middleware: [cors({ origin: 'https://app.example.com' }), requestId] })
+```
+
+The first is the outermost. A class implementing `NestMiddleware` (`use(req, next)`) is created in the root module and can `inject()`.
+
+Middleware sees the raw `Request`, not the context: for anything that depends on the route, use a guard or an interceptor.
+
+## CORS
+
+```ts
+cors({
+  origin: ['https://app.example.com'],  // '*' (the default), a string, a list, or (origin, req) => boolean
+  credentials: true,                    // cookies and Authorization from the browser
+  methods: ['GET', 'POST'],             // defaults to the common ones
+  allowedHeaders: ['content-type'],     // defaults to what the preflight asks for
+  exposedHeaders: ['x-request-id'],
+  maxAge: 600,                          // seconds the browser caches the preflight
+})
+```
+
+Only real preflights (`OPTIONS` with `Access-Control-Request-Method`) are answered by `cors()`; other `OPTIONS` requests reach your routes. `credentials: true` with `origin: '*'` is refused when the middleware is created: browsers reject that pair.
+
+Source: https://getsodajs.github.io/soda/docs/request-pipeline/
+
+---
+
+# Configuration
+
+A configuration is a schema over the environment, validated when the application starts and injected with its type. What `@nestjs/config` does with `registerAs()` and a validation schema, without string keys.
+
+```ts
+// src/config.ts
+import { defineConfig } from '@getsoda/core'
+import { z } from 'zod'
+
+export const AppConfig = defineConfig(
+  'app',
+  z.object({
+    PORT: z.coerce.number().int().default(3000),
+    CORS_ORIGIN: z.string().default('http://localhost:5173'),
+    JWT_SECRET: z.string().min(32),
+  })
+)
+```
+
+```ts
+@Module({ imports: [ConfigModule.forRoot({ load: [AppConfig], global: true })] })
+export class AppModule {}
+
+export class AuthService {
+  readonly #config = inject(AppConfig) // { PORT: number; CORS_ORIGIN: string; JWT_SECRET: string }
+}
+```
+
+Bun loads `.env`, `.env.local` and `.env.<NODE_ENV>` into `process.env` by itself; no `dotenv` is needed.
+
+## Invalid environments
+
+A configuration that does not match its schema stops the startup, with every issue at once:
+
+```
+ConfigError: Invalid configuration "app":
+  JWT_SECRET: Invalid input: expected string, received undefined
+```
+
+## Before the application exists
+
+`main.ts` may need values before `createApp()`: the port, the CORS origin. `load()` reads a configuration without the container:
+
+```ts
+const config = await AppConfig.load()
+const app = await createApp(AppModule, { middleware: [cors({ origin: config.CORS_ORIGIN })] })
+
+await app.listen(config.PORT)
+```
+
+## Nested configurations
+
+The third argument builds the input of the schema from the environment:
+
+```ts
+export const DatabaseConfig = defineConfig(
+  'database',
+  z.object({
+    url: z.url(),
+    pool: z.object({ max: z.coerce.number().int().default(10) }),
+  }),
+  (env) => ({ url: env.DATABASE_URL, pool: { max: env.DATABASE_POOL_MAX } })
+)
+```
+
+## Several configurations
+
+Each is a token of its own: a module injects what it uses, tests replace one without the others.
+
+```ts
+ConfigModule.forRoot({ load: [AppConfig, DatabaseConfig, MailConfig], global: true })
+```
+
+`env` replaces `process.env` as the source: `ConfigModule.forRoot({ load, env: { PORT: '4000' } })`.
+
+## In tests
+
+```ts
+await createTestApp(AppModule, {
+  overrides: [provide(AppConfig, { useValue: { PORT: 0, CORS_ORIGIN: '*', JWT_SECRET: 'x'.repeat(32) } })],
+})
+```
+
+A replaced configuration is not loaded, so tests need no environment for it.
+
+## Secrets
+
+Keep `.env` out of git and commit an `.env.example` listing every variable. Projects made with the `demo` template get a `.env` whose empty `*_SECRET=` lines are filled with random values.
+
+Source: https://getsodajs.github.io/soda/docs/configuration/
+
+---
+
+# Authentication
+
+## JWT
+
+`@getsoda/core/jwt` signs and verifies JSON Web Tokens with WebCrypto, without dependencies: HS256/384/512, RS, PS, ES and EdDSA; keys as secrets, PEM, JWK or `CryptoKey`. The algorithm comes from the options, never from the token, so `alg: none` and algorithm confusion are refused; the signature is checked before any claim is read.
+
+```ts
+import { JwtModule } from '@getsoda/core/jwt'
+
+@Module({
+  imports: [
+    JwtModule.registerAsync({
+      inject: [AppConfig],
+      useFactory: (config) => ({ secret: config.JWT_SECRET, expiresIn: 15 * 60, cookie: 'token' }),
+      global: true,
+    }),
+  ],
+})
+export class AuthModule {}
+```
+
+`JwtModule.register(options)` takes the options directly. `expiresIn` is in seconds.
+
+### Signing in
+
+```ts
+const Login = z.object({ email: z.email(), password: z.string() })
+
+@Controller('auth')
+export class AuthController {
+  readonly #jwt = inject(JwtService)
+  readonly #users = inject(UsersService)
+
+  @Post('login', [body(Login), context()])
+  async login(input: z.infer<typeof Login>, ctx: Context) {
+    const user = await this.#users.verify(input.email, input.password) // throws UnauthorizedException
+
+    const token = await this.#jwt.sign({ sub: String(user.id) })
+
+    // For browsers: a cookie scripts cannot read. API clients use the returned token.
+    ctx.cookies.set('token', token, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 15 * 60 })
+
+    return { token }
+  }
+
+  @Post('logout', [context()])
+  @HttpCode(204)
+  logout(ctx: Context) {
+    ctx.cookies.delete('token')
+  }
+}
+```
+
+For passwords, `Bun.password.hash()` and `Bun.password.verify()` (argon2id) are built in.
+
+### Protecting routes
+
+`JwtGuard` reads the token from `Authorization: Bearer <token>`, or from the cookie named by the `cookie` option when the header is absent. A valid token lets the request in and puts its payload under `JWT_PAYLOAD`; anything else is a `401` with the `WWW-Authenticate` challenge of RFC 6750.
+
+```ts
+@Get('me', [value(JWT_PAYLOAD)])
+@UseGuards(JwtGuard)
+me(payload: JwtPayload) {
+  return { id: payload.sub }
+}
+```
+
+To protect everything but a few routes, make the guard global and skip it with metadata:
+
+```ts
+export const Public = createDecorator<true>('Public')
+
+export class AuthGuard implements CanActivate {
+  readonly #jwt = new JwtGuard()
+
+  canActivate(ctx: Context) {
+    return ctx.metadata(Public) === true || this.#jwt.canActivate(ctx)
+  }
+}
+
+await createApp(AppModule, { guards: [AuthGuard] })
+
+@Post('login')
+@Public(true)
+login() {}
+```
+
+### The current user
+
+A guard after `JwtGuard` can load the user once and attach it:
+
+```ts
+export const USER = new ContextKey<User>('user')
+
+export class CurrentUserGuard implements CanActivate {
+  readonly #users = inject(UsersService)
+
+  async canActivate(ctx: Context) {
+    ctx.set(USER, await this.#users.findOrFail(ctx.get(JWT_PAYLOAD).sub!))
+
+    return true
+  }
+}
+
+@Get('me', [value(USER)])
+@UseGuards(JwtGuard, CurrentUserGuard)
+me(user: User) {}
+```
+
+### Without the module
+
+`new JwtService({ secret })` signs and verifies anywhere: in a script, a worker, a test.
+
+## Cookies
+
+`ctx.cookies` is Bun's `CookieMap` for the request: what you set or delete is sent with the response as `Set-Cookie`, whatever the response is. `cookie(name)` in an argument list reads one.
+
+```ts
+ctx.cookies.set('theme', 'dark', { maxAge: 60 * 60 * 24 * 365 })
+ctx.cookies.delete('theme')
+```
+
+For a session cookie: `httpOnly` (scripts cannot read it), `secure` (HTTPS only), `sameSite: 'strict'` or `'lax'` (not sent from other sites), and a name starting with `__Host-`, which browsers refuse from subdomains and over HTTP.
+
+### Signed cookies
+
+A signed cookie can be read by the client but not changed: the signature is an HMAC of the value.
+
+```ts
+const signer = new CookieSigner(process.env.COOKIE_SECRET!) // or [current, previous] to rotate keys
+
+ctx.cookies.set('session', signer.sign('user-1'), { httpOnly: true, secure: true })
+
+@Get('me', [cookie('session', signed(signer))])            // 400 when missing or forged
+me(userId: string) {}
+
+@Get('home', [cookie('session', signed(signer).optional())]) // undefined when missing or forged
+home(userId: string | undefined) {}
+```
+
+With a list of secrets, cookies are signed with the first and accepted with any: add a new secret first, remove the old one once its cookies have expired.
+
+## WebSockets
+
+Browsers send cookies with the WebSocket handshake but cannot set an `Authorization` header there: a gateway is protected by `JwtGuard` reading the cookie. See [WebSockets](https://getsodajs.github.io/soda/docs/websockets.md#guards).
+
+Source: https://getsodajs.github.io/soda/docs/authentication/
+
+---
+
+# WebSockets
+
+A gateway serves WebSocket connections on a path, with Bun's native WebSockets and their pub/sub. List it in the `controllers` of a module, like a controller.
+
+```ts
+import { data, socket, SubscribeMessage, WebSocketGateway } from '@getsoda/core'
+import type { GatewaySocket, OnGatewayConnection, OnGatewayDisconnect } from '@getsoda/core'
+
+const Say = z.object({ text: z.string().min(1).max(500) })
+
+@WebSocketGateway('/chat')
+@UseGuards(JwtGuard)
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  handleConnection(client: GatewaySocket) {
+    client.subscribe('lobby')
+  }
+
+  handleDisconnect(client: GatewaySocket, code: number) {}
+
+  @SubscribeMessage('say', [data(Say), value(JWT_PAYLOAD), socket()])
+  say(message: z.infer<typeof Say>, user: JwtPayload, client: GatewaySocket) {
+    client.publish('lobby', JSON.stringify({ event: 'said', data: { user: user.sub, text: message.text } }))
+
+    return { event: 'sent', data: null } // sent back to this client
+  }
+}
+```
+
+## Protocol
+
+Frames are JSON text, as with Nest's `WsAdapter`:
+
+```json
+{ "event": "say", "data": { "text": "hello" } }
+```
+
+- What a handler returns, unless `undefined`, is sent back to the client as JSON.
+- Frames that are not such JSON, binary frames, and events no handler subscribes to are dropped silently: anyone can send them.
+- A handler that fails is answered with an `exception` event, as Nest's `BaseWsExceptionFilter` does. An `HttpException` sends its body; any other error is logged and sent as a bare `500`:
+
+```json
+{ "event": "exception", "data": { "statusCode": 400, "message": ["text: Too small: ..."], "error": "Bad Request", "event": "say" } }
+```
+
+The connection stays open after an error.
+
+```ts
+const ws = new WebSocket('ws://localhost:3000/chat')
+
+ws.onmessage = (frame) => {
+  const { event, data } = JSON.parse(frame.data)
+}
+ws.onopen = () => ws.send(JSON.stringify({ event: 'say', data: { text: 'hello' } }))
+```
+
+## Arguments
+
+As on routes, `@SubscribeMessage(event, [...])` lists what the method receives:
+
+| Argument | Value | Nest |
+|---|---|---|
+| `data(schema?)` | the `data` of the frame, validated: an invalid one is an `exception` event, status `400` | `@MessageBody()` |
+| `socket()` | the connection | `@ConnectedSocket()` |
+| `value(key)` | what the guards of the handshake attached | |
+| `query(name)`, `header(name)`, `cookie(name)` | values of the handshake request | |
+| `context()` | the context of the handshake | |
+
+Without argument list, the method receives `(data, socket)`. `body()`, `form()` and `param()` have no meaning in a message: a gateway using them does not start.
+
+## Guards
+
+The guards of the gateway class, and global guards, run on the handshake: a refused handshake is answered over HTTP (`401`, `403`) and the connection is never opened. Browsers send cookies with the handshake, so `JwtGuard` with the `cookie` option protects a gateway; a non-browser client can send `Authorization`.
+
+The guards of a method run on each of its messages, with the context of the handshake, so what the handshake guards attached is there:
+
+```ts
+@SubscribeMessage('kick', [data(Kick)])
+@UseGuards(adminOnly) // (ctx) => ctx.get(USER).role === 'admin'
+kick(input: Kick) {}
+```
+
+A refused message is answered with an `exception` event, status `403`. In Nest, class guards run on each message and nothing runs on the handshake; here a connection that should not exist is not opened.
+
+Interceptors and exception filters apply to routes, not to message handlers: a handler with them does not start.
+
+## Rooms and broadcasting
+
+`GatewaySocket` is Bun's `ServerWebSocket`:
+
+```ts
+client.subscribe('room:42')
+client.publish('room:42', JSON.stringify({ event: 'joined', data: user.sub })) // everyone in the room but this client
+client.unsubscribe('room:42')
+client.send(JSON.stringify({ event: 'welcome', data: null }))
+client.close(1000, 'bye')
+```
+
+To send from outside a gateway (a service reacting to an event), use the server: `app.server!.publish('room:42', message)`.
+
+## Limits
+
+```ts
+await app.listen({ port: 3000, websocket: { maxPayloadLength: 64 * 1024, idleTimeout: 60 } })
+```
+
+| Option | Bun's default | |
+|---|---|---|
+| `maxPayloadLength` | 16 MiB | a bigger frame closes the connection with `1009` |
+| `idleTimeout` | 120 s | a connection without traffic is closed |
+| `backpressureLimit` | 16 MiB | buffered bytes before sends are dropped |
+| `sendPings` | `true` | pings keep the connection alive |
+| `perMessageDeflate` | `false` | compression |
+
+Lower `maxPayloadLength` to what your messages need: a client can make the server hold that much per frame.
+
+## Shutdown
+
+When the application closes, every connection is closed with code `1001` before services are destroyed, and `handleDisconnect` runs for each.
+
+Source: https://getsodajs.github.io/soda/docs/websockets/
+
+---
+
+# Rate limiting
+
+`@getsoda/core/throttler` limits how many requests each client sends to each route, as `@nestjs/throttler` does.
+
+```ts
+import { ThrottlerGuard, ThrottlerModule } from '@getsoda/core/throttler'
+
+@Module({ imports: [ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 100 }] })] })
+export class AppModule {}
+
+const app = await createApp(AppModule, { guards: [ThrottlerGuard] })
+```
+
+Every client may now send 100 requests a minute to each route. Past that, it gets `429 Too Many Requests` with `Retry-After` in seconds, until the window ends.
+
+`ThrottlerModule` is global. `ThrottlerGuard` may also protect a few controllers with `@UseGuards(ThrottlerGuard)` instead of all of them.
+
+## Several limits
+
+Every limit applies; name them to change them apart:
+
+```ts
+ThrottlerModule.forRoot({
+  throttlers: [
+    { name: 'burst', ttl: 1000, limit: 5 },  // 5 per second
+    { ttl: 60_000, limit: 100 },             // and 100 per minute, named `default`
+  ],
+})
+```
+
+`blockDuration` (milliseconds) refuses a client past the limit for that long instead of the rest of the window: `{ ttl: 60_000, limit: 5, blockDuration: 15 * 60_000 }`.
+
+## Per route
+
+```ts
+@Post('login')
+@Throttle({ default: { limit: 5, ttl: 60_000 } }) // stricter for logins
+login() {}
+
+@Controller('health')
+@SkipThrottle()                                    // not counted at all
+export class HealthController {}
+
+@Get('report')
+@SkipThrottle({ burst: true })                     // only the `default` limit applies
+report() {}
+```
+
+On a method, they win over the class: `@SkipThrottle({ default: false })` counts a route of a skipped controller.
+
+Each route is counted apart: `login` and `register` each have their own 5 a minute.
+
+## Headers
+
+Successful responses tell clients where they are:
+
+| Header | |
+|---|---|
+| `X-RateLimit-Limit` | requests allowed per window |
+| `X-RateLimit-Remaining` | requests left in this window |
+| `X-RateLimit-Reset` | seconds until the window ends |
+| `Retry-After` | on a `429`: seconds until the client is let in again |
+
+For a limit named `burst`, the headers are `X-RateLimit-Limit-burst` and so on. `headers: false` sends none but `Retry-After`.
+
+## Who is a client
+
+By default, `ctx.ip`: the address of the peer. Behind a reverse proxy or a load balancer that is the proxy, and every client would share one limit. Read the client from the header the proxy sets:
+
+```ts
+ThrottlerModule.forRoot({
+  throttlers: [{ ttl: 60_000, limit: 100 }],
+  // The last address is the one your proxy appended: clients can write the ones before it.
+  tracker: (ctx) => ctx.header('x-forwarded-for')?.split(',').at(-1)?.trim() ?? ctx.ip,
+})
+```
+
+Trust that header only behind a proxy that sets it. A tracker may also count users instead of addresses: `(ctx) => ctx.has(USER) ? ctx.get(USER).id : ctx.ip`, with the guard that sets `USER` before `ThrottlerGuard`. A tracker returning `undefined` lets the request through uncounted.
+
+`skip: (ctx) => boolean` lets requests through uncounted, such as those of your own monitoring.
+
+## Configuration from providers
+
+```ts
+ThrottlerModule.forRootAsync({
+  inject: [AppConfig],
+  useFactory: (config) => ({ throttlers: [{ ttl: 60_000, limit: config.RATE_LIMIT }] }),
+})
+```
+
+## Several instances
+
+Counts live in the memory of the process: right for one instance. With several (behind a load balancer, in a cluster), each counts on its own, so a client may send the limit to each. Share the counts with a `ThrottlerStorage`, such as one on Redis:
+
+```ts
+import { RedisClient } from 'bun'
+import type { ThrottlerRecord, ThrottlerStorage } from '@getsoda/core/throttler'
+
+export class RedisThrottlerStorage implements ThrottlerStorage {
+  readonly #redis = new RedisClient(process.env.REDIS_URL)
+
+  async increment(key: string, ttl: number, limit: number, blockDuration: number): Promise<ThrottlerRecord> {
+    const blocked = Number(await this.#redis.send('PTTL', [`${key}:blocked`]))
+
+    if (blocked > 0) {
+      return { totalHits: limit + 1, timeToExpire: blocked, isBlocked: true, timeToBlockExpire: blocked }
+    }
+
+    const hits = Number(await this.#redis.send('INCR', [key]))
+
+    if (hits === 1) {
+      await this.#redis.send('PEXPIRE', [key, String(ttl)])
+    }
+
+    const timeToExpire = Math.max(0, Number(await this.#redis.send('PTTL', [key])))
+
+    if (hits > limit) {
+      await this.#redis.send('SET', [`${key}:blocked`, '1', 'PX', String(blockDuration)])
+
+      return { totalHits: hits, timeToExpire, isBlocked: true, timeToBlockExpire: blockDuration }
+    }
+
+    return { totalHits: hits, timeToExpire, isBlocked: false, timeToBlockExpire: 0 }
+  }
+}
+
+ThrottlerModule.forRoot({ throttlers, storage: new RedisThrottlerStorage() })
+```
+
+The memory storage drops expired keys every minute, so its memory follows the clients that are active, not every client ever seen.
+
+## WebSockets
+
+On a gateway, `ThrottlerGuard` among the class guards limits handshakes: how often a client may connect.
+
+Source: https://getsodajs.github.io/soda/docs/rate-limiting/
+
+---
+
+# OpenAPI
+
+`@getsoda/core/openapi` describes your routes from what already validates them: argument parsers, and schemas implementing [Standard JSON Schema](https://standardschema.dev) (zod 4 does). Nothing is written twice: no `@ApiProperty()` on each field of a DTO, as `@nestjs/swagger` needs.
+
+```ts
+import { OpenApiModule } from '@getsoda/core/openapi'
+
+@Module({
+  imports: [
+    OpenApiModule.forRoot({
+      info: { title: 'Shop', version: '1.0.0' },
+      servers: [{ url: 'https://api.shop.example' }],
+      ui: '/docs',
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+The document is served at `/openapi.json` (the `path` option changes it), Swagger UI at `ui` when given; both follow the global prefix.
+
+## What is described
+
+From each route, without decorators:
+
+- the path, `:id` written `{id}`; an optional parameter gives two paths;
+- path, query, header and cookie parameters, typed by their parser or schema, required unless `.optional()` or the schema accepts `undefined`;
+- the JSON body of `body(schema)`, the form of `form()`;
+- the success status: `201` for `POST`, `@HttpCode()` otherwise;
+- `text/event-stream` for `@Sse()` routes.
+
+`@All()` routes and WebSocket gateways are left out: OpenAPI has no way to say "any method", nor WebSockets.
+
+## Decorators
+
+```ts
+import { ApiBearerAuth, ApiExclude, ApiOperation, ApiResponses, ApiTags } from '@getsoda/core/openapi'
+
+const User = z.object({ id: z.number().int(), name: z.string() })
+
+@Controller('users')
+@ApiTags('users')
+@ApiBearerAuth()
+export class UsersController {
+  @Get(':id', [param('id', int)])
+  @ApiOperation({ summary: 'One user', description: 'By its id.' })
+  @ApiResponses({
+    200: { description: 'The user', schema: User },
+    404: { description: 'No such user' },
+  })
+  findOne(id: number) {}
+
+  @Get('internal')
+  @ApiExclude()
+  internal() {}
+}
+```
+
+| Decorator | |
+|---|---|
+| `@ApiTags(...names)` | groups in Swagger UI |
+| `@ApiOperation({ summary, description, deprecated })` | what the operation does |
+| `@ApiResponses({ [status]: { description, schema? } })` | responses, typed by a schema |
+| `@ApiBearerAuth()` | needs `Authorization: Bearer` |
+| `@ApiExclude()` | left out of the document |
+
+On a class, they apply to every route; on a method, they win over the class.
+
+## The document itself
+
+For a client generator or a contract test, build the document without serving it:
+
+```ts
+import { createOpenApiDocument } from '@getsoda/core/openapi'
+
+const document = createOpenApiDocument(app.container.get(ROUTES).controllers, { info: { title: 'Shop', version: '1.0.0' } })
+
+await Bun.write('openapi.json', JSON.stringify(document, null, 2))
+```
+
+## Schemas without JSON Schema
+
+A schema library that does not implement Standard JSON Schema still validates, but its schema is described as `{}`: anything. Zod 4, and the libraries following the standard, describe themselves.
+
+Source: https://getsodajs.github.io/soda/docs/openapi/
+
+---
+
+# Logging
+
+The application has a `Logger`, injectable everywhere. By default a `ConsoleLogger`, writing lines as Nest does:
+
+```
+[Soda] 76590  - 11/16/2026, 12:10:15 PM     LOG [Soda] Starting application
+[Soda] 76590  - 11/16/2026, 12:10:15 PM     LOG [Container] AppModule dependencies initialized +6ms
+[Soda] 76590  - 11/16/2026, 12:10:15 PM     LOG [Routes] UsersController {/users}: +0ms
+[Soda] 76590  - 11/16/2026, 12:10:15 PM     LOG [Routes] Mapped {/users/:id, GET} route +0ms
+[Soda] 76590  - 11/16/2026, 12:10:15 PM     LOG [Soda] Application started +0ms
+```
+
+```ts
+export class UsersService {
+  readonly #logger = inject(Logger).child('UsersService')
+
+  create(user: User) {
+    this.#logger.log('User created', { id: user.id })
+  }
+}
+```
+
+Levels, from the most verbose: `verbose`, `debug`, `log`, `warn`, `error`, `fatal`. The second argument is structured data; `Error` values in it are written with their stack and cause.
+
+`child(context)` gives a logger whose entries carry that context, the `[UsersService]` of the line.
+
+## Options
+
+```ts
+import { ConsoleLogger } from '@getsoda/core'
+
+await createApp(AppModule, {
+  logger: new ConsoleLogger({
+    level: 'debug',          // least severe level written; `log` by default
+    json: true,              // one JSON object per line, for log collectors
+    prefix: 'Shop',          // instead of [Soda]
+    colors: false,           // on in a terminal without NO_COLOR
+  }),
+})
+```
+
+`logger: false` writes nothing. In production, `json: true` gives each entry with its level, time, context and data as fields.
+
+## Your own logger
+
+A logger only writes entries; levels and contexts are handled for it:
+
+```ts
+import { Logger } from '@getsoda/core'
+import type { LogEntry } from '@getsoda/core'
+import pino from 'pino'
+
+export class PinoLogger extends Logger {
+  readonly #pino = pino()
+
+  write(entry: LogEntry): void {
+    this.#pino[entry.level === 'verbose' ? 'trace' : entry.level]({ context: entry.context, ...entry.data }, entry.message)
+  }
+}
+
+await createApp(AppModule, { logger: new PinoLogger() })
+```
+
+Unlike Nest's `Logger`, it is not a static global: each application has its own, and tests replace it.
+
+## Errors
+
+Errors that no filter handles and that are not `HttpException`s are logged with their request; the client gets a bare `500`. `onError: (error, req) => ...` in the options of `createApp()` receives them instead, to send them to an error tracker.
+
+Source: https://getsodajs.github.io/soda/docs/logging/
+
+---
+
+# Testing
+
+Tests run with `bun test`. `@getsoda/core/testing` serves the application on a free port of localhost, with a silent logger, as Nest's `Test.createTestingModule()` with supertest does, on a real server.
+
+```ts
+import { afterAll, expect, test } from 'bun:test'
+import { provide } from '@getsoda/core'
+import { createTestApp } from '@getsoda/core/testing'
+import { AppModule } from './app.module.ts'
+import { Mailer } from './mail/mailer.ts'
+
+const sent: string[] = []
+
+const app = await createTestApp(AppModule, {
+  overrides: [provide(Mailer, { useValue: { send: async (to: string) => void sent.push(to) } })],
+})
+
+afterAll(() => app.close())
+
+test('signing up sends a welcome mail', async () => {
+  const response = await app.request('/users', { method: 'POST', json: { name: 'Bo', email: 'bo@example.com' } })
+
+  expect(response.status).toBe(201)
+  expect(sent).toEqual(['bo@example.com'])
+})
+```
+
+| Member | |
+|---|---|
+| `app.request(path, init?)` | `fetch()` relative to the application; `json` sends a JSON body |
+| `app.get(token)` | a provider, as the root module sees it |
+| `app.url` | where it listens |
+| `app.app` | the application itself |
+| `app.close()` | closes it; `await using app = await createTestApp(...)` does it at the end of the block |
+
+The second argument takes every option of `createApp()`: `prefix`, `guards`, `middleware`...
+
+## Replacing providers
+
+`overrides` replace providers of the same token everywhere in the graph, as Nest's `overrideProvider()`. An override that replaces nothing is an error: a renamed provider cannot leave a test silently using the real one.
+
+```ts
+overrides: [
+  provide(UsersRepository, { useClass: MemoryUsersRepository }),
+  provide(AppConfig, { useValue: { PORT: 0, JWT_SECRET: 'x'.repeat(32) } }), // not loaded from the environment
+]
+```
+
+## Signed-in requests
+
+```ts
+const login = await app.request('/auth/login', { method: 'POST', json: { email, password } })
+const { token } = (await login.json()) as { token: string }
+
+const me = await app.request('/auth/me', { headers: { authorization: `Bearer ${token}` } })
+```
+
+Or sign a token directly: `await app.get(JwtService).sign({ sub: '1' })`.
+
+## WebSockets
+
+```ts
+const socket = new WebSocket(new URL('/chat', app.url.href.replace('http', 'ws')))
+const message = new Promise((resolve) => socket.addEventListener('message', (event) => resolve(JSON.parse(String(event.data)))))
+
+await new Promise((resolve) => socket.addEventListener('open', resolve))
+socket.send(JSON.stringify({ event: 'say', data: { text: 'hi' } }))
+
+expect(await message).toEqual({ event: 'sent', data: null })
+```
+
+## Services alone
+
+A service needs no server: build its module with `createContainer()`.
+
+```ts
+import { createContainer, provide } from '@getsoda/core'
+
+const container = await createContainer(UsersModule, { overrides: [provide(UsersRepository, { useClass: MemoryUsersRepository })] })
+const users = container.get(UsersService)
+
+expect(users.create('Ann').id).toBe(1)
+await container.close()
+```
+
+## Time
+
+`setSystemTime()` from `bun:test` moves `Date.now()`: expiring tokens, rate limit windows and the like are tested without waiting.
+
+Source: https://getsodajs.github.io/soda/docs/testing/
+
+---
+
+# Production
+
+## Build
+
+```bash
+bun run build       # bun build src/main.ts --target bun --outdir dist --minify --sourcemap=linked
+bun run start:prod  # bun dist/main.js
+```
+
+The bundle holds your code and its dependencies in one file. Running the sources with `bun src/main.ts` works too: Bun runs TypeScript as is, and the bundle mostly saves startup time.
+
+## Shutdown
+
+```ts
+const app = await createApp(AppModule)
+
+app.enableShutdownSignals() // SIGTERM and SIGINT
+await app.listen(Number(process.env.PORT ?? 3000))
+```
+
+On `SIGTERM` (what Docker, Kubernetes and most hosts send), the application:
+
+1. stops accepting requests;
+2. waits for the requests in flight, and closes WebSocket connections with `1001`;
+3. runs `onDestroy` hooks: guards and the like, then services, dependents first;
+4. lets the signal end the process.
+
+Nest destroys services while its server still accepts requests; here no request meets a closed database. `enableShutdownSignals()` is off by default, as Nest's `enableShutdownHooks()`.
+
+## Behind a proxy
+
+Behind nginx, a load balancer or a platform's router, the peer of every request is the proxy:
+
+- `ctx.ip` is the proxy's address. Read the client from `x-forwarded-for`, only the part your proxy appends: see [Rate limiting](https://getsodajs.github.io/soda/docs/rate-limiting.md#who-is-a-client).
+- `ctx.url` has the scheme and host the proxy used to reach the application.
+- Cookies with `secure: true` need HTTPS between the browser and the proxy, which is the usual setup.
+
+## Limits
+
+| Limit | Where | Default |
+|---|---|---|
+| request body | `app.listen({ maxRequestBodySize })` | Bun's 128 MiB |
+| form body, files | `form(schema, { maxBodySize, maxFileSize, maxFiles, maxFields })` | none beyond the request body |
+| WebSocket frame | `app.listen({ websocket: { maxPayloadLength } })` | Bun's 16 MiB |
+| requests per client | [Rate limiting](https://getsodajs.github.io/soda/docs/rate-limiting.md) | none |
+
+Lower the body limit to what your routes accept: a megabyte is plenty for JSON APIs.
+
+```ts
+await app.listen({ port: 3000, maxRequestBodySize: 1024 * 1024 })
+```
+
+## Logs
+
+`new ConsoleLogger({ json: true })` writes one JSON object per line, for log collectors. See [Logging](https://getsodajs.github.io/soda/docs/logging.md).
+
+## Errors
+
+The client never sees an unexpected error: it gets a bare `500`, and the error goes to `onError`, which logs it by default. Send errors to a tracker there:
+
+```ts
+await createApp(AppModule, {
+  onError: (error, req) => Sentry.captureException(error, { extra: { url: req.url } }),
+})
+```
+
+## Health checks
+
+A route is enough:
+
+```ts
+@Controller('health')
+@SkipThrottle()
+export class HealthController {
+  readonly #db = inject(Database)
+
+  @Get()
+  async check() {
+    await this.#db.sql`select 1` // 500 when the database is down
+    return { status: 'ok' }
+  }
+}
+```
+
+## Docker
+
+```dockerfile
+FROM oven/bun:1.4 AS build
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY . .
+RUN bun run build
+
+FROM oven/bun:1.4-slim
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+ENV NODE_ENV=production
+EXPOSE 3000
+USER bun
+CMD ["bun", "dist/main.js"]
+```
+
+The bundle needs no `node_modules`. `CMD` in the exec form makes `bun` the first process, so it receives `SIGTERM` itself and shuts down gracefully.
+
+## Development
+
+`bun dev` runs `bun --hot`: a change re-runs the changed modules in the same process, and the new version of the application takes the server over from the previous one, which is destroyed. Requests the old version is still serving at that moment may meet its destroyed services; it never happens in production, which does not run `--hot`.
+
+Source: https://getsodajs.github.io/soda/docs/production/
+
+---
+
+# Database
+
+Soda has no database module, and needs none: a client is a provider, opened at startup and closed with the application. The same pattern fits any library, as Nest's Prisma recipe does.
+
+## Bun.sql
+
+Bun has a PostgreSQL and MySQL client built in, with pooling and tagged templates that escape values.
+
+```ts
+// src/database/database.ts
+import { SQL } from 'bun'
+import type { OnDestroy, OnInit } from '@getsoda/core'
+import { inject } from '@getsoda/core'
+import { DatabaseConfig } from './database.config.ts'
+
+export class Database implements OnInit, OnDestroy {
+  readonly sql = new SQL(inject(DatabaseConfig).url)
+
+  async onInit() {
+    await this.sql`select 1` // fail at startup when the database is unreachable
+  }
+
+  onDestroy() {
+    return this.sql.close()
+  }
+}
+```
+
+```ts
+// src/database/database.module.ts
+@Module({ providers: [Database], exports: [Database], global: true })
+export class DatabaseModule {}
+```
+
+```ts
+export class UsersRepository {
+  readonly #db = inject(Database)
+
+  async find(id: number): Promise<User | undefined> {
+    const [user] = await this.#db.sql<User[]>`select id, name from users where id = ${id}`
+
+    return user
+  }
+
+  create(name: string) {
+    return this.#db.sql.begin(async (tx) => {
+      const [user] = await tx`insert into users (name) values (${name}) returning id, name`
+      await tx`insert into audit (action) values ('user created')`
+
+      return user
+    })
+  }
+}
+```
+
+`onDestroy` runs after the last request has been served, so no query meets a closed pool.
+
+## Drizzle
+
+Drizzle builds queries and types; a driver sends them. On Bun, `drizzle-orm/bun-sql` runs on `Bun.sql`, so no other driver is installed.
+
+```ts
+import { drizzle } from 'drizzle-orm/bun-sql'
+import type { BunSQLDatabase } from 'drizzle-orm/bun-sql'
+import { SQL } from 'bun'
+import * as schema from './schema.ts'
+
+export class Database implements OnDestroy {
+  readonly #client = new SQL(inject(DatabaseConfig).url)
+  readonly db: BunSQLDatabase<typeof schema> = drizzle({ client: this.#client, schema })
+
+  onDestroy() {
+    return this.#client.close()
+  }
+}
+```
+
+```ts
+import { eq } from 'drizzle-orm'
+import { users } from './schema.ts'
+
+export class UsersRepository {
+  readonly #db = inject(Database).db
+
+  async find(id: number) {
+    const [user] = await this.#db.select().from(users).where(eq(users.id, id))
+
+    return user
+  }
+}
+```
+
+Other drivers (`drizzle-orm/postgres-js`, `drizzle-orm/node-postgres`, `drizzle-orm/bun-sqlite`) fit the same class.
+
+## Prisma
+
+```ts
+import { PrismaClient } from '../generated/prisma/client.ts' // where your Prisma generator writes the client
+
+export class PrismaService extends PrismaClient implements OnInit, OnDestroy {
+  async onInit() {
+    await this.$connect()
+  }
+
+  async onDestroy() {
+    await this.$disconnect()
+  }
+}
+
+@Module({ providers: [PrismaService], exports: [PrismaService], global: true })
+export class PrismaModule {}
+```
+
+```ts
+readonly #prisma = inject(PrismaService)
+
+findOne(id: number) {
+  return this.#prisma.user.findUnique({ where: { id } })
+}
+```
+
+## SQLite
+
+`bun:sqlite` is synchronous and in-process: one `Database` provider, closed in `onDestroy`.
+
+```ts
+import { Database as SQLite } from 'bun:sqlite'
+
+export class Database implements OnDestroy {
+  readonly sqlite = new SQLite('app.db', { strict: true })
+
+  onDestroy() {
+    this.sqlite.close()
+  }
+}
+```
+
+## In tests
+
+Replace the provider, or point the configuration at a test database:
+
+```ts
+await createTestApp(AppModule, {
+  overrides: [provide(DatabaseConfig, { useValue: { url: process.env.TEST_DATABASE_URL! } })],
+})
+```
+
+For a fast suite, replace the repository instead of the database: `provide(UsersRepository, { useClass: MemoryUsersRepository })`.
+
+## Errors
+
+Map database errors to HTTP in an exception filter rather than in each route:
+
+```ts
+@Catch(SQL.PostgresError)
+export class UniqueViolationFilter implements ExceptionFilter<SQL.PostgresError> {
+  catch(error: SQL.PostgresError) {
+    if (error.errno === '23505') {
+      return Response.json({ statusCode: 409, message: 'Already exists', error: 'Conflict' }, { status: 409 })
+    }
+
+    throw error // a failing filter falls back to the default: logged, a bare 500
+  }
+}
+```
+
+Source: https://getsodajs.github.io/soda/docs/recipes/database/
+
+---
+
+# File uploads
+
+`form()` reads `multipart/form-data` bodies; files are `File` objects, Bun's, with `name`, `type`, `size` and the content.
+
+## One file
+
+```ts
+const Avatar = z.object({
+  avatar: z
+    .instanceof(File)
+    .refine((file) => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type), 'PNG, JPEG or WebP is expected'),
+})
+
+@Post('me/avatar', [form(Avatar, { maxFileSize: 2 * 1024 * 1024, maxFiles: 1 }), value(USER)])
+@HttpCode(204)
+async uploadAvatar(input: z.infer<typeof Avatar>, user: User) {
+  await Bun.write(`uploads/${user.id}.img`, input.avatar)
+}
+```
+
+```bash
+curl -X POST localhost:3000/me/avatar -F avatar=@photo.png -H "authorization: Bearer $TOKEN"
+```
+
+## Several files and fields
+
+A repeated field, or a field named `photos[]`, is an array:
+
+```ts
+const Album = z.object({
+  title: z.string().min(1),
+  photos: z.array(z.instanceof(File)).min(1).max(20),
+})
+
+@Post('albums', [form(Album, { maxFileSize: 10 * 1024 * 1024, maxFiles: 20, maxBodySize: 100 * 1024 * 1024 })])
+create(album: z.infer<typeof Album>) {}
+```
+
+A single `photos` field gives a single `File`, not an array: `z.array()` then refuses it. Name the field `photos[]` in the client to always get an array.
+
+## Limits
+
+Each limit answers `413` as soon as it is exceeded:
+
+| Limit | |
+|---|---|
+| `maxBodySize` | bytes of the whole body, checked while it is read: a huge upload is refused without being stored |
+| `maxFileSize` | bytes of each file |
+| `maxFiles` | number of files |
+| `maxFields` | number of fields, files included |
+
+Without `maxBodySize`, the server's `maxRequestBodySize` (Bun's 128 MiB unless lowered in `listen()`) still applies. Set limits on every upload route: a form without them accepts as many files as the client sends.
+
+## Content type
+
+`file.type` is what the client declared. When it matters, check the content itself, its first bytes for instance:
+
+```ts
+const isPng = async (file: File) => {
+  const head = new Uint8Array(await file.slice(0, 8).arrayBuffer())
+
+  return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, i) => head[i] === byte)
+}
+```
+
+Never build a path from `file.name`: it is written by the client, `../../etc/passwd` included. Name stored files yourself, with an id.
+
+## Storage
+
+`Bun.write(path, file)` stores on disk. For S3 and compatible storages (R2, MinIO), Bun has a client built in:
+
+```ts
+import { s3 } from 'bun'
+
+await s3.write(`avatars/${user.id}`, input.avatar, { type: input.avatar.type })
+```
+
+It reads its credentials from `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` and `S3_ENDPOINT`.
+
+## Downloads
+
+Return a file, or `Bun.file()`, and it is streamed:
+
+```ts
+@Get('files/:id', [param('id', uuid)])
+download(id: string) {
+  return new Response(Bun.file(`uploads/${id}`), {
+    headers: { 'content-disposition': `attachment; filename="${id}"` },
+  })
+}
+```
+
+Source: https://getsodajs.github.io/soda/docs/recipes/file-uploads/
+
+---
+
+# From Nest
+
+Soda keeps Nest's model (modules, providers, controllers, guards, interceptors, filters) and changes how it is written, because it uses standard decorators and runs on Bun.
+
+## Why it looks different
+
+Nest relies on two TypeScript features of the legacy decorator mode:
+
+- **parameter decorators**, as in `create(@Body() dto: CreateUserDto)`: standard decorators have none, the syntax does not exist outside `experimentalDecorators`;
+- **emitted type metadata** (`emitDecoratorMetadata`): the compiler writes the types of constructor parameters into the code, so that Nest knows what to inject and which DTO class to validate.
+
+Soda uses neither. What a method receives is listed in its route decorator, and what a class needs is asked with `inject()`. No compiler flag, no `reflect-metadata`, and `import type` or a bundler that does not emit metadata (esbuild, Vite) cannot break injection.
+
+## Side by side
+
+| Nest | Soda |
+|---|---|
+| `constructor(private users: UsersService) {}` | `readonly #users = inject(UsersService)` |
+| `@Inject(TOKEN) private value: T` | `readonly #value = inject(TOKEN)` |
+| `@Optional()` | `inject(Logger, { optional: true })` |
+| `{ provide: TOKEN, useFactory, inject: [A] }` | `provide(TOKEN, { useFactory, inject: [A] })`, typed |
+| `'CONFIG'` string tokens | `new InjectionToken<Config>('CONFIG')`, typed |
+| `@Injectable({ scope: Scope.TRANSIENT })` | `@Injectable({ scope: 'transient' })` |
+| `Scope.REQUEST` | none: request data goes in the context, `ctx.set()` and `value()` |
+| `onModuleInit`, `onModuleDestroy` | `onInit`, `onDestroy` |
+| `@Get(':id') findOne(@Param('id', ParseIntPipe) id: number)` | `@Get(':id', [param('id', int)]) findOne(id: number)` |
+| `@Body() dto: CreateUserDto` + `class-validator` | `[body(CreateUser)]` with a zod (or valibot, arktype) schema |
+| `@Query('page', new DefaultValuePipe(1), ParseIntPipe)` | `[query('page', z.coerce.number().default(1))]` |
+| `@Req()`, `@Res({ passthrough: true })` | `[context()]`: `ctx.req`, `ctx.cookies`, `ctx.responseHeaders` |
+| `@UploadedFile()` + multer | `[form(schema, limits)]`, files are `File`s |
+| `@Headers('x')`, `@Ip()` | `[header('x')]`, `ctx.ip` |
+| custom `@User()` parameter decorator | a guard does `ctx.set(USER, user)`, the route lists `value(USER)` |
+| `Reflector` + `SetMetadata` | `createDecorator()` + `ctx.metadata()` |
+| `NestInterceptor` with RxJS | `Interceptor` with a promise: `await next()` |
+| `@Sse()` returning an `Observable` | `@Sse()` returning an async generator |
+| `app.useGlobalGuards()` and the like | `createApp(AppModule, { guards, interceptors, filters, middleware })` |
+| `app.setGlobalPrefix('api')` | `createApp(AppModule, { prefix: 'api' })` |
+| `app.enableCors()` | `middleware: [cors()]` |
+| `app.enableShutdownHooks()` | `app.enableShutdownSignals()` |
+| `Test.createTestingModule()` + supertest | `createTestApp(AppModule, { overrides })` |
+| `.overrideProvider(A).useValue(x)` | `overrides: [provide(A, { useValue: x })]` |
+| `@nestjs/config` | `defineConfig()` + `ConfigModule`, typed by the schema |
+| `@nestjs/jwt` + `@nestjs/passport` | `@getsoda/core/jwt`: `JwtModule`, `JwtGuard` |
+| `@nestjs/throttler` | `@getsoda/core/throttler` |
+| `@nestjs/swagger` with `@ApiProperty()` on each field | `@getsoda/core/openapi`, schemas from the validation |
+| `@nestjs/websockets`, `@MessageBody()`, `@ConnectedSocket()` | `@WebSocketGateway()`, `data()`, `socket()`, on Bun's WebSockets |
+
+## What behaves differently
+
+- **WebSocket guards.** Class guards run on the handshake, method guards on each message; in Nest, class guards run on each message and nothing on the handshake.
+- **Shutdown.** The server stops accepting requests and drains them before services are destroyed; Nest destroys services while still serving.
+- **Errors.** A missing provider, a `param()` that is not in the path, two routes for one request, an invalid configuration: all stop the startup, with a message pointing to your code.
+- **`ParseIntPipe`.** `int` refuses integers beyond `Number.MAX_SAFE_INTEGER` instead of rounding them.
+- **Lifecycle hooks** run one after another, deterministically; Nest runs a level in parallel.
+- **Logger.** Not a static global: each application has its own, injected.
+
+## Not in Soda
+
+- **Microservices** (`@nestjs/microservices`: Kafka, NATS, gRPC transports): use the client of your broker in a provider.
+- **GraphQL** (`@nestjs/graphql`): mount `graphql-yoga` on a route.
+- **CLI generators** (`nest g resource`): `bun create soda` creates projects, not files.
+- **Queues, cron, cache, health, CQRS, i18n modules:** a provider wrapping the library you choose does it; see [Database](https://getsodajs.github.io/soda/docs/recipes/database.md) for the pattern.
+
+## Speed
+
+On the same machine and Bun, Soda serves about twice the requests per second of Nest on Fastify, on par with Hono; see the [benchmark](https://github.com/getsodajs/soda/tree/main/bench/http).
+
+Source: https://getsodajs.github.io/soda/docs/from-nest/
