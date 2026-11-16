@@ -107,29 +107,40 @@ const find = (lines: readonly string[], text: readonly string[], from: number): 
   return undefined
 }
 
-/** `site` in the sources: in its class when it names one, the class itself otherwise. */
+/**
+ * `site` in the sources: in its class when it names one, the class itself
+ * otherwise. Of several classes of that name, the one holding the text wins.
+ */
 const search = (site: SourceSite, files: ReadonlyMap<string, readonly string[]>): Place => {
-  const declaration = site.class === undefined ? undefined : new RegExp(`\\bclass ${site.class.replaceAll('$', '\\$')}\\b`)
-
-  for (const [file, lines] of files) {
-    if (declaration === undefined) {
+  if (site.class === undefined) {
+    for (const [file, lines] of files) {
       const found = find(lines, site.text, 0)
 
       if (found !== undefined) {
         return { file, ...found }
       }
-
-      continue
     }
 
-    const start = lines.findIndex((line) => declaration.test(line))
+    return {}
+  }
 
-    if (start >= 0) {
-      return { file, ...(find(lines, site.text, start) ?? { line: start + 1, column: lines[start]!.indexOf('class') + 1 }) }
+  const declaration = new RegExp(`\\bclass ${site.class.replaceAll('$', '\\$')}\\b`)
+  let fallback: Place = {}
+
+  for (const [file, lines] of files) {
+    const start = lines.findIndex((line) => declaration.test(line))
+    const found = start < 0 ? undefined : find(lines, site.text, start)
+
+    if (found !== undefined) {
+      return { file, ...found }
+    }
+
+    if (start >= 0 && fallback.file === undefined) {
+      fallback = { file, line: start + 1, column: lines[start]!.indexOf('class') + 1 }
     }
   }
 
-  return {}
+  return fallback
 }
 
 /** The first frame of the stack in the application's own code. */
