@@ -30,11 +30,18 @@ export const MAX_NATIVE_ROUTES = 100_000
 export type Params = Record<string, string>
 
 /**
+ * The server a request came to, as Bun passes it to route handlers: for
+ * `server.requestIP(req)`. Absent when a handler is called directly.
+ */
+// oxlint-disable-next-line typescript/no-explicit-any
+export type RequestServer = Bun.Server<any>
+
+/**
  * Route handler.
  *
  * `params` may be the very object Bun put on `req.params`: treat it as read-only.
  */
-export type Handler = (req: Bun.BunRequest, params: Params) => Response | Promise<Response>
+export type Handler = (req: Bun.BunRequest, params: Params, server?: RequestServer) => Response | Promise<Response>
 
 /**
  * Route definition.
@@ -72,7 +79,7 @@ export interface CompileOptions {
 /**
  * Handler of a single native route, as accepted by `Bun.serve({ routes })`.
  */
-export type NativeHandler = (req: Bun.BunRequest) => Response | Promise<Response>
+export type NativeHandler = (req: Bun.BunRequest, server?: RequestServer) => Response | Promise<Response>
 
 /**
  * Result of `compileRoutes`, ready to be spread into `Bun.serve()` or `server.reload()`.

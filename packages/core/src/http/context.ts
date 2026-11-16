@@ -12,6 +12,7 @@ import { applyParser } from './parsers.ts'
 import type { Parsed, ValueParser } from './parsers.ts'
 import { isStandardSchema, validate } from './schema.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
+import type { RequestServer } from '../routing/index.ts'
 import type { AnyParams, PathParams } from './types.ts'
 
 /**
@@ -63,8 +64,19 @@ export class Context<P extends string = string> {
   constructor(
     readonly req: Bun.BunRequest,
     readonly params: ContextParams<P>,
-    readonly route: RouteInfo
+    readonly route: RouteInfo,
+    /** The server the request came to; absent when a handler is called directly. */
+    readonly server?: RequestServer
   ) {}
+
+  /**
+   * Address of the peer the request came from, as Bun's `server.requestIP()`.
+   * Behind a proxy, that is the proxy: read the client from the header it sets
+   * (`x-forwarded-for`), only when the proxy is trusted to set it.
+   */
+  get ip(): string | undefined {
+    return this.server?.requestIP(this.req)?.address
+  }
 
   /** Attaches a value to this request, for the guards, interceptors and handler that follow. */
   set<T>(key: ContextKey<T>, value: T): void {

@@ -23,7 +23,7 @@
  */
 
 import type { Constructor } from '../di/index.ts'
-import type { NativeHandler } from '../routing/index.ts'
+import type { NativeHandler, RequestServer } from '../routing/index.ts'
 
 /** Continues with the next middleware, then the route. */
 export type Next = () => Promise<Response>
@@ -87,14 +87,14 @@ export const resolveMiddleware = (
  */
 export const withMiddleware = <R extends Request>(
   steps: readonly Step[],
-  handler: (req: R) => Response | Promise<Response>,
+  handler: (req: R, server?: RequestServer) => Response | Promise<Response>,
   onError: (error: unknown, req: Request) => Response
-): ((req: R) => Promise<Response>) => {
+): ((req: R, server?: RequestServer) => Promise<Response>) => {
   const count = steps.length
 
-  return (req) => {
+  return (req, server) => {
     const call = (index: number): Promise<Response> =>
-      index === count ? settle(() => handler(req)) : settle(() => steps[index]!(req, () => call(index + 1)))
+      index === count ? settle(() => handler(req, server)) : settle(() => steps[index]!(req, () => call(index + 1)))
 
     return call(0).catch((error: unknown) => onError(error, req))
   }

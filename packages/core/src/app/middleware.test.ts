@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, it } from 'bun:test'
 import { inject, Module } from '../di/index.ts'
 import type { ModuleClass, OnDestroy, OnInit } from '../di/index.ts'
-import { Controller, cors, Get, Options } from '../http/index.ts'
+import { context, Controller, cors, Get, Options } from '../http/index.ts'
+import type { Context } from '../http/index.ts'
 import type { Middleware, NestMiddleware, Next } from '../http/index.ts'
 import { createApp } from './app.ts'
 import type { App, AppOptions } from './app.ts'
@@ -25,6 +26,11 @@ class ItemsController {
   custom(): string {
     return 'own OPTIONS route'
   }
+
+  @Get('/ip', [context()])
+  ip(ctx: Context): string | undefined {
+    return ctx.ip
+  }
 }
 
 @Module({ controllers: [ItemsController] })
@@ -40,6 +46,14 @@ const start = async (options: AppOptions, module: ModuleClass = ItemsModule) => 
 }
 
 describe('middleware', () => {
+  it('keeps the server of the request, for the address of the peer', async () => {
+    const bare = await start({})
+    const wrapped = await start({ middleware: [(_req, next) => next()] })
+
+    expect(await (await bare('/items/ip')).text()).toMatch(/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/)
+    expect(await (await wrapped('/items/ip')).text()).toMatch(/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/)
+  })
+
   it('runs around every request, first outermost, including 404 and 405', async () => {
     const order: string[] = []
 

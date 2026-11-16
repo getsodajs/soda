@@ -221,8 +221,8 @@ export const createPipeline = (parts: PipelineParts): Handler => {
     }
   }
 
-  const handler: Handler = (req, params) => {
-    const ctx = new Context(req, params, route)
+  const handler: Handler = (req, params, server) => {
+    const ctx = new Context(req, params, route, server)
 
     try {
       const gate = hasGuards ? runGuards(guards, ctx, 0) : undefined

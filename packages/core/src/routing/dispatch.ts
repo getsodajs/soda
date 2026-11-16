@@ -261,7 +261,7 @@ export const createDispatcher = (
 
       return constantParams === undefined
         ? { direct: handler, resolve: miss }
-        : { direct: undefined, resolve: (req) => handler(req, constantParams) }
+        : { direct: undefined, resolve: (req, server) => handler(req, constantParams, server) }
     }
 
     if (len === 0) {
@@ -270,7 +270,7 @@ export const createDispatcher = (
 
     return {
       direct: undefined,
-      resolve: (req) => {
+      resolve: (req, server) => {
         for (let i = 0; i < len; i++) {
           const candidate = list[i]!
 
@@ -279,13 +279,13 @@ export const createDispatcher = (
           }
 
           if (candidate.buildParams === undefined) {
-            return candidate.handler(req, candidate.constantParams ?? req.params)
+            return candidate.handler(req, candidate.constantParams ?? req.params, server)
           }
 
           const params = candidate.buildParams(req)
 
           if (params !== undefined) {
-            return candidate.handler(req, params)
+            return candidate.handler(req, params, server)
           }
         }
 
@@ -331,9 +331,9 @@ export const createDispatcher = (
 
   const other = createEntry(select(METHOD_ALL))
 
-  return (req) => {
+  return (req, server) => {
     const entry = table[req.method] ?? other
 
-    return entry.direct !== undefined ? entry.direct(req, req.params) : entry.resolve(req)
+    return entry.direct !== undefined ? entry.direct(req, req.params, server) : entry.resolve(req, server)
   }
 }

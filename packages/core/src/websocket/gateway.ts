@@ -304,28 +304,18 @@ const collectHandlers = (parts: GatewayParts): Map<string, MessageHandler> => {
 export const buildGateway = (parts: GatewayParts): BuiltGateway => {
   const runtime = new GatewayRuntime(parts.entry.instance as object, collectHandlers(parts), parts.onError)
   const route: RouteInfo = { controller: parts.entry.controller, handler: 'handshake', method: 'GET', path: parts.path, metadata: parts.metadata }
-  // The pipeline is built once; the server of each request is found here.
-  const servers = new WeakMap<Request, Bun.Server<GatewaySocketData>>()
   const pipeline = createPipeline({
     route,
     guards: parts.guards,
     interceptors: [],
     filters: parts.filters,
     invoke: (ctx) =>
-      servers.get(ctx.req)!.upgrade(ctx.req, { data: { context: ctx, gateway: runtime } })
+      (ctx.server as Bun.Server<GatewaySocketData>).upgrade(ctx.req, { data: { context: ctx, gateway: runtime } })
         ? UPGRADED
         : new Response('Expected a WebSocket upgrade', { status: 426, headers: { upgrade: 'websocket' } }),
     respond: (value) => (value === UPGRADED ? (undefined as unknown as Response) : (value as Response)),
     onError: parts.onError,
   })
 
-  return {
-    path: parts.path,
-    runtime,
-    handle: (req, server) => {
-      servers.set(req, server)
-
-      return pipeline(req, {})
-    },
-  }
+  return { path: parts.path, runtime, handle: (req, server) => pipeline(req, {}, server) }
 }
