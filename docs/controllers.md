@@ -74,7 +74,7 @@ findOne(id: number, fields: string | undefined, language: string | undefined) {}
 
 The types are checked: `findOne(id: string)` after `param('id', int)` is a compile error, and so is a method that does not accept what the list gives. A `param()` name that is not in the full path stops the startup and lists the parameters the path has.
 
-Without parser, `param('id')` is a `string`, `string | undefined` for an optional parameter; `query()`, `header()` and `cookie()` are `string | undefined`. Parsers and schemas are in [Validation](https://getsodajs.github.io/docs/validation.md).
+Without parser, `param('id')` is a `string`, `string | undefined` for an optional parameter; `query()`, `header()` and `cookie()` are `string | undefined`. Parsers and schemas are in [Validation](https://sodajs.dev/docs/validation.md).
 
 ## The context
 
@@ -96,7 +96,7 @@ findOne(ctx: Context<':id'>) {
 | `ctx.responseHeaders` | headers added to the response, whatever it is |
 | `ctx.url` | the parsed `URL`, built on first use |
 | `ctx.ip` | address of the peer |
-| `ctx.get(key)`, `ctx.set(key, value)`, `ctx.has(key)` | values attached to the request, see [Request pipeline](https://getsodajs.github.io/docs/request-pipeline.md) |
+| `ctx.get(key)`, `ctx.set(key, value)`, `ctx.has(key)` | values attached to the request, see [Request pipeline](https://sodajs.dev/docs/request-pipeline.md) |
 | `ctx.metadata(decorator)` | custom metadata of the route |
 | `ctx.route` | controller, method name, HTTP method, full path |
 

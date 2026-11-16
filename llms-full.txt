@@ -181,9 +181,9 @@ curl localhost:3000/users/abc
 # {"statusCode":400,"message":"Validation failed for \"id\" (integer string is expected)","error":"Bad Request"}
 ```
 
-Next: [Controllers](https://getsodajs.github.io/docs/controllers.md).
+Next: [Controllers](https://sodajs.dev/docs/controllers.md).
 
-Source: https://getsodajs.github.io/docs/getting-started/
+Source: https://sodajs.dev/docs/getting-started/
 
 ---
 
@@ -263,7 +263,7 @@ findOne(id: number, fields: string | undefined, language: string | undefined) {}
 
 The types are checked: `findOne(id: string)` after `param('id', int)` is a compile error, and so is a method that does not accept what the list gives. A `param()` name that is not in the full path stops the startup and lists the parameters the path has.
 
-Without parser, `param('id')` is a `string`, `string | undefined` for an optional parameter; `query()`, `header()` and `cookie()` are `string | undefined`. Parsers and schemas are in [Validation](https://getsodajs.github.io/docs/validation.md).
+Without parser, `param('id')` is a `string`, `string | undefined` for an optional parameter; `query()`, `header()` and `cookie()` are `string | undefined`. Parsers and schemas are in [Validation](https://sodajs.dev/docs/validation.md).
 
 ## The context
 
@@ -285,7 +285,7 @@ findOne(ctx: Context<':id'>) {
 | `ctx.responseHeaders` | headers added to the response, whatever it is |
 | `ctx.url` | the parsed `URL`, built on first use |
 | `ctx.ip` | address of the peer |
-| `ctx.get(key)`, `ctx.set(key, value)`, `ctx.has(key)` | values attached to the request, see [Request pipeline](https://getsodajs.github.io/docs/request-pipeline.md) |
+| `ctx.get(key)`, `ctx.set(key, value)`, `ctx.has(key)` | values attached to the request, see [Request pipeline](https://sodajs.dev/docs/request-pipeline.md) |
 | `ctx.metadata(decorator)` | custom metadata of the route |
 | `ctx.route` | controller, method name, HTTP method, full path |
 
@@ -335,7 +335,7 @@ const source = new EventSource('/ticks')
 source.onmessage = (event) => console.log(JSON.parse(event.data))
 ```
 
-Source: https://getsodajs.github.io/docs/controllers/
+Source: https://sodajs.dev/docs/controllers/
 
 ---
 
@@ -423,11 +423,11 @@ update(profile: z.infer<typeof Profile>) {}
 - Files are `File` objects. Their `type` is what the client declared: check the content itself when it matters.
 - Limits answer `413` past them: `maxBodySize` (bytes of the body, refused as soon as it is exceeded, before it is read entirely), `maxFileSize`, `maxFiles` and `maxFields`.
 
-`form(limits)` without schema gives the fields as they are. See also [File uploads](https://getsodajs.github.io/docs/recipes/file-uploads.md).
+`form(limits)` without schema gives the fields as they are. See also [File uploads](https://sodajs.dev/docs/recipes/file-uploads.md).
 
 ## Signed cookies
 
-`signed(signer)` checks a cookie's signature, as a parser: see [Authentication](https://getsodajs.github.io/docs/authentication.md#cookies).
+`signed(signer)` checks a cookie's signature, as a parser: see [Authentication](https://sodajs.dev/docs/authentication.md#cookies).
 
 ## Writing a parser
 
@@ -456,7 +456,7 @@ list(since: Date) {}
 
 Most of the time a schema is simpler: `z.coerce.date()`.
 
-Source: https://getsodajs.github.io/docs/validation/
+Source: https://sodajs.dev/docs/validation/
 
 ---
 
@@ -521,7 +521,7 @@ readonly #url = inject(DATABASE_URL) // string
 export class Timer {}
 ```
 
-There is no request scope: data of a request travels in its context (`ctx.set()`, `value()`), which keeps the graph static and costs nothing per request. See [Request pipeline](https://getsodajs.github.io/docs/request-pipeline.md#values-of-a-request).
+There is no request scope: data of a request travels in its context (`ctx.set()`, `value()`), which keeps the graph static and costs nothing per request. See [Request pipeline](https://sodajs.dev/docs/request-pipeline.md#values-of-a-request).
 
 ## Modules
 
@@ -604,7 +604,7 @@ const users = container.get(UsersService)
 await container.close()
 ```
 
-Source: https://getsodajs.github.io/docs/providers-and-modules/
+Source: https://sodajs.dev/docs/providers-and-modules/
 
 ---
 
@@ -789,7 +789,7 @@ cors({
 
 Only real preflights (`OPTIONS` with `Access-Control-Request-Method`) are answered by `cors()`; other `OPTIONS` requests reach your routes. `credentials: true` with `origin: '*'` is refused when the middleware is created: browsers reject that pair.
 
-Source: https://getsodajs.github.io/docs/request-pipeline/
+Source: https://sodajs.dev/docs/request-pipeline/
 
 ---
 
@@ -882,7 +882,7 @@ A replaced configuration is not loaded, so tests need no environment for it.
 
 Keep `.env` out of git and commit an `.env.example` listing every variable. Projects made with the `demo` template get a `.env` whose empty `*_SECRET=` lines are filled with random values.
 
-Source: https://getsodajs.github.io/docs/configuration/
+Source: https://sodajs.dev/docs/configuration/
 
 ---
 
@@ -1030,9 +1030,9 @@ With a list of secrets, cookies are signed with the first and accepted with any:
 
 ## WebSockets
 
-Browsers send cookies with the WebSocket handshake but cannot set an `Authorization` header there: a gateway is protected by `JwtGuard` reading the cookie. See [WebSockets](https://getsodajs.github.io/docs/websockets.md#guards).
+Browsers send cookies with the WebSocket handshake but cannot set an `Authorization` header there: a gateway is protected by `JwtGuard` reading the cookie. See [WebSockets](https://sodajs.dev/docs/websockets.md#guards).
 
-Source: https://getsodajs.github.io/docs/authentication/
+Source: https://sodajs.dev/docs/authentication/
 
 ---
 
@@ -1155,7 +1155,7 @@ Lower `maxPayloadLength` to what your messages need: a client can make the serve
 
 When the application closes, every connection is closed with code `1001` before services are destroyed, and `handleDisconnect` runs for each.
 
-Source: https://getsodajs.github.io/docs/websockets/
+Source: https://sodajs.dev/docs/websockets/
 
 ---
 
@@ -1294,7 +1294,7 @@ The memory storage drops expired keys every minute, so its memory follows the cl
 
 On a gateway, `ThrottlerGuard` among the class guards limits handshakes: how often a client may connect.
 
-Source: https://getsodajs.github.io/docs/rate-limiting/
+Source: https://sodajs.dev/docs/rate-limiting/
 
 ---
 
@@ -1382,7 +1382,7 @@ await Bun.write('openapi.json', JSON.stringify(document, null, 2))
 
 A schema library that does not implement Standard JSON Schema still validates, but its schema is described as `{}`: anything. Zod 4, and the libraries following the standard, describe themselves.
 
-Source: https://getsodajs.github.io/docs/openapi/
+Source: https://sodajs.dev/docs/openapi/
 
 ---
 
@@ -1455,7 +1455,7 @@ Unlike Nest's `Logger`, it is not a static global: each application has its own,
 
 Errors that no filter handles and that are not `HttpException`s are logged with their request; the client gets a bare `500`. `onError: (error, req) => ...` in the options of `createApp()` receives them instead, to send them to an error tracker.
 
-Source: https://getsodajs.github.io/docs/logging/
+Source: https://sodajs.dev/docs/logging/
 
 ---
 
@@ -1548,7 +1548,7 @@ await container.close()
 
 `setSystemTime()` from `bun:test` moves `Date.now()`: expiring tokens, rate limit windows and the like are tested without waiting.
 
-Source: https://getsodajs.github.io/docs/testing/
+Source: https://sodajs.dev/docs/testing/
 
 ---
 
@@ -1585,7 +1585,7 @@ Nest destroys services while its server still accepts requests; here no request 
 
 Behind nginx, a load balancer or a platform's router, the peer of every request is the proxy:
 
-- `ctx.ip` is the proxy's address. Read the client from `x-forwarded-for`, only the part your proxy appends: see [Rate limiting](https://getsodajs.github.io/docs/rate-limiting.md#who-is-a-client).
+- `ctx.ip` is the proxy's address. Read the client from `x-forwarded-for`, only the part your proxy appends: see [Rate limiting](https://sodajs.dev/docs/rate-limiting.md#who-is-a-client).
 - `ctx.url` has the scheme and host the proxy used to reach the application.
 - Cookies with `secure: true` need HTTPS between the browser and the proxy, which is the usual setup.
 
@@ -1596,7 +1596,7 @@ Behind nginx, a load balancer or a platform's router, the peer of every request 
 | request body | `app.listen({ maxRequestBodySize })` | Bun's 128 MiB |
 | form body, files | `form(schema, { maxBodySize, maxFileSize, maxFiles, maxFields })` | none beyond the request body |
 | WebSocket frame | `app.listen({ websocket: { maxPayloadLength } })` | Bun's 16 MiB |
-| requests per client | [Rate limiting](https://getsodajs.github.io/docs/rate-limiting.md) | none |
+| requests per client | [Rate limiting](https://sodajs.dev/docs/rate-limiting.md) | none |
 
 Lower the body limit to what your routes accept: a megabyte is plenty for JSON APIs.
 
@@ -1606,7 +1606,7 @@ await app.listen({ port: 3000, maxRequestBodySize: 1024 * 1024 })
 
 ## Logs
 
-`new ConsoleLogger({ json: true })` writes one JSON object per line, for log collectors. See [Logging](https://getsodajs.github.io/docs/logging.md).
+`new ConsoleLogger({ json: true })` writes one JSON object per line, for log collectors. See [Logging](https://sodajs.dev/docs/logging.md).
 
 ## Errors
 
@@ -1661,7 +1661,7 @@ The bundle needs no `node_modules`. `CMD` in the exec form makes `bun` the first
 
 `bun dev` runs `bun --hot`: a change re-runs the changed modules in the same process, and the new version of the application takes the server over from the previous one, which is destroyed. Requests the old version is still serving at that moment may meet its destroyed services; it never happens in production, which does not run `--hot`.
 
-Source: https://getsodajs.github.io/docs/production/
+Source: https://sodajs.dev/docs/production/
 
 ---
 
@@ -1831,7 +1831,7 @@ export class UniqueViolationFilter implements ExceptionFilter<SQL.PostgresError>
 }
 ```
 
-Source: https://getsodajs.github.io/docs/recipes/database/
+Source: https://sodajs.dev/docs/recipes/database/
 
 ---
 
@@ -1927,7 +1927,7 @@ download(id: string) {
 }
 ```
 
-Source: https://getsodajs.github.io/docs/recipes/file-uploads/
+Source: https://sodajs.dev/docs/recipes/file-uploads/
 
 ---
 
@@ -1992,10 +1992,10 @@ Soda uses neither. What a method receives is listed in its route decorator, and 
 - **Microservices** (`@nestjs/microservices`: Kafka, NATS, gRPC transports): use the client of your broker in a provider.
 - **GraphQL** (`@nestjs/graphql`): mount `graphql-yoga` on a route.
 - **CLI generators** (`nest g resource`): `bun create soda` creates projects, not files.
-- **Queues, cron, cache, health, CQRS, i18n modules:** a provider wrapping the library you choose does it; see [Database](https://getsodajs.github.io/docs/recipes/database.md) for the pattern.
+- **Queues, cron, cache, health, CQRS, i18n modules:** a provider wrapping the library you choose does it; see [Database](https://sodajs.dev/docs/recipes/database.md) for the pattern.
 
 ## Speed
 
 On the same machine and Bun, Soda serves about twice the requests per second of Nest on Fastify, on par with Hono; see the [benchmark](https://github.com/getsodajs/soda/tree/main/bench/http).
 
-Source: https://getsodajs.github.io/docs/from-nest/
+Source: https://sodajs.dev/docs/from-nest/

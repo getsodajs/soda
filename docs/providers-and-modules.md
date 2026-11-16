@@ -59,7 +59,7 @@ readonly #url = inject(DATABASE_URL) // string
 export class Timer {}
 ```
 
-There is no request scope: data of a request travels in its context (`ctx.set()`, `value()`), which keeps the graph static and costs nothing per request. See [Request pipeline](https://getsodajs.github.io/docs/request-pipeline.md#values-of-a-request).
+There is no request scope: data of a request travels in its context (`ctx.set()`, `value()`), which keeps the graph static and costs nothing per request. See [Request pipeline](https://sodajs.dev/docs/request-pipeline.md#values-of-a-request).
 
 ## Modules
 

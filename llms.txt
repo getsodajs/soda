@@ -11,40 +11,40 @@
 
 ## Getting started
 
-- [Getting started](https://getsodajs.github.io/docs/getting-started.md): Bun 1.4 or later. No TypeScript flags are needed: Soda uses standard decorators, not experimentalDecorators.
+- [Getting started](https://sodajs.dev/docs/getting-started.md): Bun 1.4 or later. No TypeScript flags are needed: Soda uses standard decorators, not experimentalDecorators.
 
 ## Essentials
 
-- [Controllers](https://getsodajs.github.io/docs/controllers.md): A controller is a class whose methods serve routes. List it in the controllers of a module.
-- [Validation](https://getsodajs.github.io/docs/validation.md): Soda validates with any Standard Schema library: zod, valibot, arktype and others. No DTO classes, no class-validator: the schema is the type.
-- [Providers and modules](https://getsodajs.github.io/docs/providers-and-modules.md): A class gets its dependencies with inject(), in a field initializer or its constructor.
-- [Request pipeline](https://getsodajs.github.io/docs/request-pipeline.md): Guards, interceptors and filters are what Nest calls enhancers. They are declared globally, on a controller or on a method, and run in Nest's order: global…
+- [Controllers](https://sodajs.dev/docs/controllers.md): A controller is a class whose methods serve routes. List it in the controllers of a module.
+- [Validation](https://sodajs.dev/docs/validation.md): Soda validates with any Standard Schema library: zod, valibot, arktype and others. No DTO classes, no class-validator: the schema is the type.
+- [Providers and modules](https://sodajs.dev/docs/providers-and-modules.md): A class gets its dependencies with inject(), in a field initializer or its constructor.
+- [Request pipeline](https://sodajs.dev/docs/request-pipeline.md): Guards, interceptors and filters are what Nest calls enhancers. They are declared globally, on a controller or on a method, and run in Nest's order: global…
 
 ## Features
 
-- [Configuration](https://getsodajs.github.io/docs/configuration.md): A configuration is a schema over the environment, validated when the application starts and injected with its type.
-- [Authentication](https://getsodajs.github.io/docs/authentication.md): @getsoda/core/jwt signs and verifies JSON Web Tokens with WebCrypto, without dependencies: HS256/384/512, RS, PS, ES and EdDSA; keys as secrets, PEM, JWK or…
-- [WebSockets](https://getsodajs.github.io/docs/websockets.md): A gateway serves WebSocket connections on a path, with Bun's native WebSockets and their pub/sub. List it in the controllers of a module, like a controller.
-- [Rate limiting](https://getsodajs.github.io/docs/rate-limiting.md): @getsoda/core/throttler limits how many requests each client sends to each route, as @nestjs/throttler does.
-- [OpenAPI](https://getsodajs.github.io/docs/openapi.md): @getsoda/core/openapi describes your routes from what already validates them: argument parsers, and schemas implementing Standard JSON Schema (zod 4 does).
-- [Logging](https://getsodajs.github.io/docs/logging.md): The application has a Logger, injectable everywhere. By default a ConsoleLogger, writing lines as Nest does.
+- [Configuration](https://sodajs.dev/docs/configuration.md): A configuration is a schema over the environment, validated when the application starts and injected with its type.
+- [Authentication](https://sodajs.dev/docs/authentication.md): @getsoda/core/jwt signs and verifies JSON Web Tokens with WebCrypto, without dependencies: HS256/384/512, RS, PS, ES and EdDSA; keys as secrets, PEM, JWK or…
+- [WebSockets](https://sodajs.dev/docs/websockets.md): A gateway serves WebSocket connections on a path, with Bun's native WebSockets and their pub/sub. List it in the controllers of a module, like a controller.
+- [Rate limiting](https://sodajs.dev/docs/rate-limiting.md): @getsoda/core/throttler limits how many requests each client sends to each route, as @nestjs/throttler does.
+- [OpenAPI](https://sodajs.dev/docs/openapi.md): @getsoda/core/openapi describes your routes from what already validates them: argument parsers, and schemas implementing Standard JSON Schema (zod 4 does).
+- [Logging](https://sodajs.dev/docs/logging.md): The application has a Logger, injectable everywhere. By default a ConsoleLogger, writing lines as Nest does.
 
 ## Shipping
 
-- [Testing](https://getsodajs.github.io/docs/testing.md): Tests run with bun test. @getsoda/core/testing serves the application on a free port of localhost, with a silent logger, as Nest's Test.createTestingModule()…
-- [Production](https://getsodajs.github.io/docs/production.md): The bundle holds your code and its dependencies in one file. Running the sources with bun src/main.ts works too: Bun runs TypeScript as is, and the bundle…
+- [Testing](https://sodajs.dev/docs/testing.md): Tests run with bun test. @getsoda/core/testing serves the application on a free port of localhost, with a silent logger, as Nest's Test.createTestingModule()…
+- [Production](https://sodajs.dev/docs/production.md): The bundle holds your code and its dependencies in one file. Running the sources with bun src/main.ts works too: Bun runs TypeScript as is, and the bundle…
 
 ## Recipes
 
-- [Database](https://getsodajs.github.io/docs/recipes/database.md): Soda has no database module, and needs none: a client is a provider, opened at startup and closed with the application.
-- [File uploads](https://getsodajs.github.io/docs/recipes/file-uploads.md): form() reads multipart/form-data bodies; files are File objects, Bun's, with name, type, size and the content.
+- [Database](https://sodajs.dev/docs/recipes/database.md): Soda has no database module, and needs none: a client is a provider, opened at startup and closed with the application.
+- [File uploads](https://sodajs.dev/docs/recipes/file-uploads.md): form() reads multipart/form-data bodies; files are File objects, Bun's, with name, type, size and the content.
 
 ## From Nest
 
-- [From Nest](https://getsodajs.github.io/docs/from-nest.md): Soda keeps Nest's model (modules, providers, controllers, guards, interceptors, filters) and changes how it is written, because it uses standard decorators and…
+- [From Nest](https://sodajs.dev/docs/from-nest.md): Soda keeps Nest's model (modules, providers, controllers, guards, interceptors, filters) and changes how it is written, because it uses standard decorators and…
 
 ## Optional
 
-- [All documentation in one file](https://getsodajs.github.io/llms-full.txt)
+- [All documentation in one file](https://sodajs.dev/llms-full.txt)
 - [HTTP benchmark](https://github.com/getsodajs/soda/tree/main/bench/http): Soda, Hono and Nest over HTTP
 - [Source code](https://github.com/getsodajs/soda)

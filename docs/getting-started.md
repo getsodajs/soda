@@ -168,4 +168,4 @@ curl localhost:3000/users/abc
 # {"statusCode":400,"message":"Validation failed for \"id\" (integer string is expected)","error":"Bad Request"}
 ```
 
-Next: [Controllers](https://getsodajs.github.io/docs/controllers.md).
+Next: [Controllers](https://sodajs.dev/docs/controllers.md).
