@@ -16,11 +16,14 @@
  * returned, every singleton exists.
  */
 
+import { atSite } from '../utils/errors.ts'
 import { isThenable } from '../utils/promise.ts'
 import { runInContext } from './context.ts'
 import type { InjectionContext } from './context.ts'
 import { Module } from './decorators.ts'
 import type { DynamicModule, ModuleClass, ModuleImport } from './decorators.ts'
+import { isSafeToCheck, STUB } from './dry.ts'
+import type { ReportProblem } from './dry.ts'
 import { DiError } from './errors.ts'
 import { buildGraph } from './graph.ts'
 import type { ModuleGraph, ModuleNode, ProviderNode } from './graph.ts'
@@ -127,9 +130,14 @@ class Resolver {
   starting = true
   readonly #graph: ModuleGraph
   readonly #stack: ProviderNode[] = []
+  /** Set for a dry run: problems are reported and give stubs. */
+  readonly #report: ReportProblem | undefined
+  /** Stubs handed out in a dry run, to tell a class failing on its own from one failing on a stub. */
+  #stubs = 0
 
-  constructor(graph: ModuleGraph) {
+  constructor(graph: ModuleGraph, report?: ReportProblem) {
     this.#graph = graph
+    this.#report = report
   }
 
   /** Provider for `token` as seen from `module`. */
@@ -143,25 +151,50 @@ class Resolver {
     }
 
     if (providers.size > 1) {
-      throw new DiError(
+      throw this.#located(token, new DiError(
         'AMBIGUOUS_PROVIDER',
         `${tokenName(token)} is exported to ${module.name} by several imports with different providers ` +
           `(${ownersOf(providers)}; ${chainOf(this.#stack, token)}). Provide it in ${module.name} or import only one of them.`
-      )
+      ))
     }
 
     if (optional) {
       return undefined
     }
 
-    throw new DiError(
-      'NO_PROVIDER',
-      `No provider for ${tokenName(token)} in ${module.name} (${chainOf(this.#stack, token)}).${this.#hint(module, token)}`
+    throw this.#located(
+      token,
+      new DiError('NO_PROVIDER', `No provider for ${tokenName(token)} in ${module.name} (${chainOf(this.#stack, token)}).`, this.#hint(module, token))
     )
+  }
+
+  /** The `inject()` call in the class asking for `token`, for `soda check`. */
+  #located(token: Token<unknown>, error: DiError): DiError {
+    const requester = this.#stack.at(-1)
+
+    if (requester === undefined || typeof requester.token !== 'function') {
+      return error
+    }
+
+    const name = typeof token === 'function' ? token.name : (token as { description?: string }).description
+
+    return atSite(error, { class: requester.token.name, text: name === undefined ? [] : [`inject(${name}`] })
   }
 
   /** Value of `token` for code running in `module`, created synchronously if needed. */
   resolve(module: ModuleNode, token: Token<unknown>, optional: boolean): unknown {
+    if (this.#report === undefined) {
+      return this.#resolve(module, token, optional)
+    }
+
+    try {
+      return this.#resolve(module, token, optional)
+    } catch (error) {
+      return this.#stub(error)
+    }
+  }
+
+  #resolve(module: ModuleNode, token: Token<unknown>, optional: boolean): unknown {
     const requester = this.#stack[this.#stack.length - 1]
 
     if (requester !== undefined && requester.token === token && requester.module === module) {
@@ -207,8 +240,13 @@ class Resolver {
         return this.resolve(node.module, definition.target, false)
       }
 
-      const value =
-        definition.kind === 'class' ? this.#construct(node, definition.useClass) : this.#callFactory(node, definition)
+      let value: unknown
+
+      if (definition.kind === 'class') {
+        value = this.#construct(node, definition.useClass)
+      } else {
+        value = this.#dry(definition) ? this.#dryFactory(node, definition) : this.#callFactory(node, definition)
+      }
 
       if (node.scope === 'singleton') {
         this.#store(node, value)
@@ -238,6 +276,20 @@ class Resolver {
       return node.promise
     }
 
+    if (this.#dry(definition)) {
+      this.#enter(node)
+
+      try {
+        const value = this.#dryFactory(node, definition)
+
+        this.#store(node, value)
+
+        return value
+      } finally {
+        this.#stack.pop()
+      }
+    }
+
     this.#enter(node)
 
     try {
@@ -260,6 +312,17 @@ class Resolver {
       }
 
       return await this.#track(node, result)
+    } catch (error) {
+      if (this.#report === undefined) {
+        throw error
+      }
+
+      // A factory safe to check failed, a configuration most likely: reported, stubbed.
+      const value = this.#stub(error)
+
+      this.#store(node, value)
+
+      return value
     } finally {
       this.#stack.pop()
     }
@@ -297,7 +360,46 @@ class Resolver {
   #construct(node: ProviderNode, useClass: Constructor<unknown>): unknown {
     const context: InjectionContext = { resolve: (token, optional) => this.resolve(node.module, token, optional) }
 
-    return runInContext(context, () => new useClass())
+    if (this.#report === undefined) {
+      return runInContext(context, () => new useClass())
+    }
+
+    const stubs = this.#stubs
+
+    try {
+      return runInContext(context, () => new useClass())
+    } catch (error) {
+      // Failing on a stub is the dry run's doing, not the class's.
+      if (this.#stubs === stubs) {
+        this.#report(error)
+      }
+
+      // An instance all the same: the methods of a controller still give routes.
+      return Object.create(useClass.prototype) as unknown
+    }
+  }
+
+  /** In a dry run, a factory is not called unless marked safe to check. */
+  #dry(definition: FactoryDefinition): boolean {
+    return this.#report !== undefined && !isSafeToCheck(definition.useFactory)
+  }
+
+  /** What a factory gives in a dry run: its dependencies resolved, problems reported, and a stub. */
+  #dryFactory(node: ProviderNode, definition: FactoryDefinition): unknown {
+    for (const dependency of definition.dependencies) {
+      this.resolve(node.module, dependency.token, dependency.optional)
+    }
+
+    this.#stubs++
+
+    return STUB
+  }
+
+  #stub(error: unknown): unknown {
+    this.#report!(error)
+    this.#stubs++
+
+    return STUB
   }
 
   /** Calls a factory synchronously, for transient factories and singletons needed before their turn. */
@@ -400,12 +502,12 @@ class Resolver {
 
       if (candidate.providers.has(token)) {
         return candidate.exportedTokens.has(token)
-          ? ` ${candidate.name} exports it: add ${candidate.name} to the imports of ${module.name}.`
-          : ` ${candidate.name} provides it but does not export it.`
+          ? `${candidate.name} exports it: add ${candidate.name} to the imports of ${module.name}.`
+          : `${candidate.name} provides it but does not export it: add it to the exports of ${candidate.name}.`
       }
     }
 
-    return ` Add it to the providers of ${module.name}, or import a module that exports it.`
+    return `Add it to the providers of ${module.name}, or import a module that exports it.`
   }
 }
 
@@ -516,14 +618,14 @@ class StartedContainer implements Container {
 /**
  * Creates every singleton of `graph`: factories first, then providers, controllers, module classes.
  */
-const createAll = async (graph: ModuleGraph, resolver: Resolver): Promise<ControllerEntry[]> => {
+const createAll = async (graph: ModuleGraph, resolver: Resolver, report?: ReportProblem): Promise<ControllerEntry[]> => {
   const { providers, controllers, modules } = graph
 
   for (let i = 0, len = providers.length; i < len; i++) {
     const node = providers[i]!
 
     if (node.definition.kind === 'factory' && node.scope === 'singleton') {
-      await resolver.getAsync(node)
+      await attempt(() => resolver.getAsync(node), report)
     }
   }
 
@@ -531,7 +633,7 @@ const createAll = async (graph: ModuleGraph, resolver: Resolver): Promise<Contro
     const node = providers[i]!
 
     if (node.scope === 'singleton') {
-      resolver.get(node)
+      attempt(() => resolver.get(node), report)
     }
   }
 
@@ -552,10 +654,27 @@ const createAll = async (graph: ModuleGraph, resolver: Resolver): Promise<Contro
   }
 
   for (let i = 0, len = modules.length; i < len; i++) {
-    resolver.get(modules[i]!.instance)
+    attempt(() => resolver.get(modules[i]!.instance), report)
   }
 
   return entries
+}
+
+/** Runs `fn`; in a dry run, an error is reported instead of thrown. */
+function attempt<R>(fn: () => R, report: ReportProblem | undefined): R | undefined {
+  if (report === undefined) {
+    return fn()
+  }
+
+  try {
+    const result = fn()
+
+    return isThenable(result) ? (Promise.resolve(result).catch(report) as R) : result
+  } catch (error) {
+    report(error)
+
+    return undefined
+  }
 }
 
 /**
@@ -572,8 +691,7 @@ const createAll = async (graph: ModuleGraph, resolver: Resolver): Promise<Contro
  * hooks fail too, everything is rethrown as one `AggregateError`, startup error first.
  */
 export const createContainer = async (root: ModuleImport, options: ContainerOptions = {}): Promise<Container> => {
-  const providers = options.providers ?? []
-  const graph = await buildGraph(root, options.overrides ?? [], providers.length > 0 ? [providersModule(providers)] : [])
+  const graph = await graphOf(root, options)
   const resolver = new Resolver(graph)
 
   try {
@@ -598,4 +716,26 @@ export const createContainer = async (root: ModuleImport, options: ContainerOpti
 
     throw error
   }
+}
+
+const graphOf = (root: ModuleImport, options: ContainerOptions): Promise<ModuleGraph> => {
+  const providers = options.providers ?? []
+
+  return buildGraph(root, options.overrides ?? [], providers.length > 0 ? [providersModule(providers)] : [])
+}
+
+/**
+ * The dry run of `createContainer`, for `soda check`: every class created,
+ * no factory called but those safe to check, no lifecycle hook; problems go
+ * to `report` instead of failing. Errors of the graph itself still reject.
+ * The container is not closed: what it holds was never initialized.
+ */
+export const createDryContainer = async (root: ModuleImport, options: ContainerOptions, report: ReportProblem): Promise<Container> => {
+  const graph = await graphOf(root, options)
+  const resolver = new Resolver(graph, report)
+  const controllers = await createAll(graph, resolver, report)
+
+  resolver.starting = false
+
+  return new StartedContainer(graph, resolver, controllers)
 }

@@ -84,6 +84,7 @@ At startup Soda logs the modules, the controllers and each route, as Nest does.
 | `bun run start:prod` | runs the bundle |
 | `bun test`, `test:watch`, `test:cov` | tests, with coverage for `test:cov` |
 | `bun run typecheck` | `bun check` |
+| `bun run check:app` | [`soda check`](./check.md): what would stop the application from starting, without starting it |
 | `bun run lint`, `lint:fix` | oxlint |
 
 ## Your first resource

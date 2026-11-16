@@ -163,6 +163,13 @@ describe.each(TEMPLATES.map((template) => template.name))('generated %s project'
     expect(result.code, result.output).toBe(0)
   }, 60_000)
 
+  it('passes soda check', async () => {
+    const result = await run(root, ['bun', 'run', 'check:app'])
+
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('✔ ok')
+  }, 60_000)
+
   it('builds a bundle that serves requests', async () => {
     expect((await run(root, ['bun', 'run', 'build'])).code).toBe(0)
 

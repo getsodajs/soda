@@ -24,7 +24,7 @@
 import { InjectionToken } from '../di/token.ts'
 import { formatIssues } from '../http/schema.ts'
 import type { InferOutput, StandardSchemaV1 } from '../http/schema.ts'
-import { hideFrameworkFrames } from '../utils/errors.ts'
+import { atSite, hideFrameworkFrames, quoted } from '../utils/errors.ts'
 
 /** Environment variables, as in `process.env`. */
 export type Environment = Readonly<Record<string, string | undefined>>
@@ -61,7 +61,7 @@ export class Config<T> extends InjectionToken<T> {
     const result = await this.#schema['~standard'].validate(this.#source(env))
 
     if (result.issues !== undefined) {
-      throw new ConfigError(this.description, formatIssues(result.issues, ''))
+      throw atSite(new ConfigError(this.description, formatIssues(result.issues, '')), { text: quoted('defineConfig(', this.description) })
     }
 
     return result.value

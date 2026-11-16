@@ -22,7 +22,7 @@
 import { createContainer, provide } from '../di/index.ts'
 import type { Container, ContainerOptions, ModuleImport } from '../di/index.ts'
 import { destroyAll, initializeAll } from '../di/lifecycle.ts'
-import { buildRoutes, ControllerError, ROUTES } from '../http/index.ts'
+import { buildRoutes, ROUTES } from '../http/index.ts'
 import type { ControllerRoutesOptions, MappedController, Middleware } from '../http/index.ts'
 import { errorResponse } from '../http/exceptions.ts'
 import { applyMiddleware, resolveMiddleware } from '../http/middleware.ts'
@@ -30,12 +30,15 @@ import { ConsoleLogger, Logger, SilentLogger } from '../logger/index.ts'
 import type { StartupReport, StartupRoute } from '../logger/index.ts'
 import type { Argument } from '../http/arguments.ts'
 import { compileRoutes } from '../routing/index.ts'
-import type { CompiledRoutes, CompileOptions, NativeHandler } from '../routing/index.ts'
-import { websocketHandler } from '../websocket/gateway.ts'
+import type { CompileOptions } from '../routing/index.ts'
 import type { BuiltGateway, GatewaySocketData } from '../websocket/gateway.ts'
 import { labelOf } from '../utils/name.ts'
 import { VERSION } from '../version.ts'
+import { CHECK_HOOK, checkApp } from './check.ts'
+import type { CheckHook } from './check.ts'
 import { release, takeOver } from './hot.ts'
+import { withGateways } from './serve.ts'
+import type { ServeRoutes } from './serve.ts'
 
 /**
  * Options of `createApp`.
@@ -274,29 +277,6 @@ const destroyEverything = async (enhancers: readonly unknown[], container: Conta
   }
 }
 
-/**
- * Routes and WebSocket handlers for `Bun.serve()`: the handshakes of gateways
- * are native routes of their own, outside middleware, as an upgrade returns no response.
- */
-export interface ServeRoutes {
-  readonly routes: Record<string, NativeHandler | BuiltGateway['handle']>
-  readonly fetch: CompiledRoutes['fetch']
-  readonly websocket: Bun.WebSocketHandler<GatewaySocketData>
-}
-
-const withGateways = (compiled: CompiledRoutes, gateways: readonly BuiltGateway[]): ServeRoutes => {
-  const routes: ServeRoutes['routes'] = { ...compiled.routes }
-
-  for (const gateway of gateways) {
-    if (Object.hasOwn(routes, gateway.path)) {
-      throw new ControllerError('DUPLICATE_ROUTE', `The WebSocket gateway on ${gateway.path} has the path of another gateway or route`)
-    }
-
-    routes[gateway.path] = gateway.handle
-  }
-
-  return { routes, fetch: compiled.fetch, websocket: websocketHandler }
-}
 
 /** What the startup summary needs, but the URL and the duration known once listening. */
 interface Summary extends Omit<StartupReport, 'url' | 'duration'> {
@@ -364,6 +344,15 @@ const describeRoutes = (controllers: readonly MappedController[], gateways: read
  * error first, as `createContainer` does.
  */
 export const createApp = async (root: ModuleImport, options: AppOptions = {}): Promise<App> => {
+  const check = (globalThis as Record<symbol, CheckHook | undefined>)[CHECK_HOOK]
+
+  // Under `soda check`: the report goes to the command, which ends the process; nothing starts.
+  if (check !== undefined) {
+    check(checkApp(root, options))
+
+    return new Promise<never>(() => undefined)
+  }
+
   const logger = options.logger === false ? new SilentLogger() : (options.logger ?? new ConsoleLogger())
   const own = logger.child('Soda')
   const onError =

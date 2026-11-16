@@ -41,9 +41,11 @@ export class DiError extends Error {
 
   constructor(
     readonly code: DiErrorCode,
-    message: string
+    message: string,
+    /** How to fix it, when there is one way: also the end of the message. */
+    readonly fix?: string
   ) {
-    super(message)
+    super(fix === undefined ? message : `${message} ${fix}`)
     hideFrameworkFrames(this)
   }
 }

@@ -318,7 +318,7 @@ describe('modules', () => {
     await expectDiError(
       () => createContainer(AppModule),
       'NO_PROVIDER',
-      /No provider for Database in AppModule \(Users → Database\)\. DatabaseModule provides it but does not export it\./
+      /No provider for Database in AppModule \(Users → Database\)\. DatabaseModule provides it but does not export it: add it to the exports of DatabaseModule\./
     )
   })
 

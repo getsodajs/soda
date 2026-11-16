@@ -8,6 +8,7 @@ bun dev          # bun --hot: reloads on change
 bun debug        # the same, with the inspector
 bun test         # test:watch, test:cov
 bun typecheck
+bun check:app    # soda check: startup problems, without starting
 bun lint         # oxlint; lint:fix
 bun run build    # bundles src/main.ts into dist/
 bun start:prod   # runs the bundle

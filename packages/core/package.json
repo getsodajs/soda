@@ -46,6 +46,9 @@
     },
     "./package.json": "./package.json"
   },
+  "bin": {
+    "soda": "./dist/cli/main.js"
+  },
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
@@ -57,7 +60,7 @@
     "bun": ">=1.4.0"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/main.js",
     "prepublishOnly": "cd ../.. && bun run lint && bun run typecheck && bun run test && cd packages/core && bun run build"
   },
   "devDependencies": {

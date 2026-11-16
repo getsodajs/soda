@@ -3,6 +3,7 @@
  * `ConfigModule`: loads configurations at startup, like `ConfigModule.forRoot()` of `@nestjs/config`.
  */
 
+import { safeToCheck } from '../di/dry.ts'
 import { Module, provide } from '../di/index.ts'
 import type { DynamicModule } from '../di/index.ts'
 import type { Config, Environment } from './config.ts'
@@ -33,7 +34,7 @@ export class ConfigModule {
     return {
       module: ConfigModule,
       global: options.global ?? false,
-      providers: options.load.map((config) => provide(config, { useFactory: () => config.load(options.env) })),
+      providers: options.load.map((config) => provide(config, { useFactory: safeToCheck(() => config.load(options.env)) })),
       exports: options.load,
     }
   }

@@ -17,6 +17,7 @@ import type { RouteDefinition } from '../routing/index.ts'
 import { parsePath } from '../routing/path.ts'
 import { labelOf } from '../utils/name.ts'
 import { methodNames } from '../utils/object.ts'
+import { atSite, quoted } from '../utils/errors.ts'
 import { isThenable } from '../utils/promise.ts'
 import type { Argument } from './arguments.ts'
 import type { Context, RouteInfo } from './context.ts'
@@ -73,7 +74,12 @@ const joinPaths = (...parts: readonly string[]): string => {
 const assertHttpArguments = (args: readonly Argument<unknown>[], name: string): void => {
   for (const arg of args) {
     if (arg.kind === 'message' || arg.kind === 'socket') {
-      throw new ControllerError('INVALID_ARGUMENT', `${name}: ${arg.kind === 'message' ? 'data' : 'socket'}() is an argument of @SubscribeMessage(), not of a route`)
+      const call = arg.kind === 'message' ? 'data' : 'socket'
+
+      throw atSite(new ControllerError('INVALID_ARGUMENT', `${name}: ${call}() is an argument of @SubscribeMessage(), not of a route`), {
+        class: name.split('.')[0]!,
+        text: [`${call}(`],
+      })
     }
   }
 }
@@ -92,7 +98,10 @@ const assertParamsExist = (args: readonly Argument<unknown>[], path: string, nam
     if (arg.kind === 'param' && !names.has(arg.name)) {
       const known = names.size === 0 ? 'it has none' : `its parameters: ${[...names].join(', ')}`
 
-      throw new ControllerError('UNKNOWN_PARAM', `${name}: param('${arg.name}') is not a parameter of "${path}" (${known})`)
+      throw atSite(new ControllerError('UNKNOWN_PARAM', `${name}: param('${arg.name}') is not a parameter of "${path}" (${known})`), {
+        class: name.split('.')[0]!,
+        text: quoted('param(', arg.name),
+      })
     }
   }
 }
@@ -161,12 +170,15 @@ class RoutesBuilder {
   readonly #global: EnhancerResolver
   readonly #modules = new Map<ModuleClass, EnhancerResolver>()
   readonly #onError: (error: unknown, req: Request) => void
+  /** Set by `soda check`: a controller, method or gateway failing is reported, and skipped. */
+  readonly #report: ((error: unknown) => void) | undefined
   readonly #track = (instance: unknown): void => {
     this.enhancers.push(instance)
   }
 
-  constructor(container: Container, options: ControllerRoutesOptions) {
+  constructor(container: Container, options: ControllerRoutesOptions, report?: (error: unknown) => void) {
     this.#options = options
+    this.#report = report
     this.#global = createEnhancerResolver((fn) => container.runInContext(fn), this.#track)
     this.#onError = options.onError ?? ((error: unknown) => console.error(error))
   }
@@ -195,10 +207,25 @@ class RoutesBuilder {
 
     // The most derived function: an override without route decorators has no metadata.
     for (const name of methodNames(entry.instance as object)) {
-      this.#addMethod(entry, basePath, name)
+      this.attempt(() => this.#addMethod(entry, basePath, name))
     }
 
     this.controllers.push({ controller: entry.controller, path: basePath, routes: this.#mapped })
+  }
+
+  /** Runs `fn`; when checking, an error is reported instead of thrown. */
+  attempt(fn: () => void): void {
+    if (this.#report === undefined) {
+      fn()
+
+      return
+    }
+
+    try {
+      fn()
+    } catch (error) {
+      this.#report(error)
+    }
   }
 
   /** A gateway: its handshake gets the guards and filters of the class and the global ones. */
@@ -339,11 +366,15 @@ export interface BuiltRoutes {
 /**
  * Builds the routes of every controller of `container`.
  */
-export const buildRoutes = (container: Container, options: ControllerRoutesOptions = {}): BuiltRoutes => {
-  const builder = new RoutesBuilder(container, options)
+export const buildRoutes = (
+  container: Container,
+  options: ControllerRoutesOptions = {},
+  report?: (error: unknown) => void
+): BuiltRoutes => {
+  const builder = new RoutesBuilder(container, options, report)
 
   for (const entry of container.controllers) {
-    builder.addController(entry)
+    builder.attempt(() => builder.addController(entry))
   }
 
   return { routes: builder.routes, controllers: builder.controllers, gateways: builder.gateways, enhancers: builder.enhancers }

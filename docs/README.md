@@ -19,6 +19,7 @@ These pages describe the `main` branch. Soda is 0.x: the API may change between 
 11. [Logging](./logging.md): the logger, levels, JSON output
 12. [Testing](./testing.md): the application over HTTP, replaced providers
 13. [Production](./production.md): build, shutdown, proxies, limits, Docker
+14. [Checking the application](./check.md): `soda check`, every startup problem at once, for people and agents
 
 ## Recipes
 
