@@ -35,6 +35,7 @@ import type { BuiltGateway, GatewaySocketData } from '../websocket/gateway.ts'
 import { labelOf } from '../utils/name.ts'
 import { VERSION } from '../version.ts'
 import { CHECK_HOOK, checkApp } from './check.ts'
+import { inspectApp } from './inspect.ts'
 import type { CheckHook } from './check.ts'
 import { release, takeOver } from './hot.ts'
 import { withGateways } from './serve.ts'
@@ -348,7 +349,7 @@ export const createApp = async (root: ModuleImport, options: AppOptions = {}): P
 
   // Under `soda check`: the report goes to the command, which ends the process; nothing starts.
   if (check !== undefined) {
-    check(checkApp(root, options))
+    check({ check: () => checkApp(root, options), inspect: () => inspectApp(root, options) })
 
     return new Promise<never>(() => undefined)
   }

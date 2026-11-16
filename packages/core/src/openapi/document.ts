@@ -63,8 +63,8 @@ interface WithJsonSchema {
   readonly '~standard': { readonly jsonSchema?: { readonly input: (options: { readonly target: string }) => Record<string, unknown> } }
 }
 
-/** JSON Schema of what a parser or schema accepts, `{}` when it cannot tell. */
-const toJsonSchema = (source: Argument<unknown>['source']): JsonSchema => {
+/** JSON Schema of what a parser or schema accepts, `{}` when it cannot tell or the schema has none. */
+export const toJsonSchema = (source: Argument<unknown>['source']): JsonSchema => {
   if (source === undefined) {
     return STRING
   }
@@ -79,13 +79,18 @@ const toJsonSchema = (source: Argument<unknown>['source']): JsonSchema => {
     return {}
   }
 
-  const { $schema: _, ...schema } = converter.input({ target: 'draft-2020-12' })
+  try {
+    const { $schema: _, ...schema } = converter.input({ target: 'draft-2020-12' })
 
-  return schema
+    return schema
+  } catch {
+    // Some schemas have no JSON Schema: zod's `z.instanceof(File)` in a form, a custom refinement.
+    return {}
+  }
 }
 
 /** A value may be missing when its parser says so, or its schema accepts `undefined`. */
-const isOptional = (source: Argument<unknown>['source']): boolean => {
+export const isOptional = (source: Argument<unknown>['source']): boolean => {
   if (source === undefined) {
     return true
   }

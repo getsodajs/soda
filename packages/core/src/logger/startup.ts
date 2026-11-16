@@ -79,30 +79,37 @@ const header = (report: StartupReport, palette: Palette): string[] => {
   return lines
 }
 
-/** Lines of the summary, blank lines around. */
-export const drawStartup = (report: StartupReport, palette: Palette): string => {
-  const lines = header(report, palette)
+/** The routes as a table: method, path, handler, then what each reads, its guards and interceptors. */
+export const drawRoutes = (routes: readonly StartupRoute[], palette: Palette): string[] => {
+  const lines: string[] = []
   let methodWidth = 0
   let pathWidth = 0
   let handlerWidth = 0
 
-  for (const route of report.routes) {
+  for (const route of routes) {
     methodWidth = Math.max(methodWidth, route.method.length)
     pathWidth = Math.max(pathWidth, route.path.length)
     handlerWidth = Math.max(handlerWidth, route.handler.length)
   }
 
-  if (report.routes.length > 0) {
-    lines.push('')
-  }
-
-  for (const route of report.routes) {
+  for (const route of routes) {
     const method = pad(route.method, palette.method(route.method)(route.method), methodWidth + 2)
     const path = pad(route.path, paintPath(route.path, palette), pathWidth + 2)
     const rest = extras(route, palette)
     const handler = rest === '' ? route.handler : pad(route.handler, route.handler, handlerWidth + 2)
 
     lines.push(`${INDENT}${method}${path}${handler}${rest}`)
+  }
+
+  return lines
+}
+
+/** Lines of the summary, blank lines around. */
+export const drawStartup = (report: StartupReport, palette: Palette): string => {
+  const lines = header(report, palette)
+
+  if (report.routes.length > 0) {
+    lines.push('', ...drawRoutes(report.routes, palette))
   }
 
   lines.push('')

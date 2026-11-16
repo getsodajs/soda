@@ -1,10 +1,16 @@
-# Checking the application
+# Checking and inspecting
 
-`soda check` finds what would stop the application from starting, every problem at once, without starting it:
+Two commands look at the application without starting it:
+
+- `soda check`: what would stop it from starting, every problem at once;
+- `soda inspect`: its modules, what each provider injects, its routes.
 
 ```bash
-bun run check:app   # soda check
+bun run check:app   # soda check, a script of new projects
+bunx soda inspect
 ```
+
+## soda check
 
 ```
   soda check  3 problems  6 ms
@@ -30,7 +36,7 @@ bun run check:app   # soda check
 
 It exits with `1` when there is a problem, `0` otherwise: a step for CI, a pre-commit hook, or an agent after each change.
 
-## What it checks
+### What it checks
 
 What `createApp()` checks at startup, but all of it instead of the first error:
 
@@ -40,9 +46,9 @@ What `createApp()` checks at startup, but all of it instead of the first error:
 - routes: conflicts between them, a gateway on the path of a route;
 - a class failing in its constructor.
 
-## How it works
+### How it works
 
-`soda check` runs the entry of the application (`src/main.ts`, or the file given: `soda check src/worker.ts`). When that file calls `createApp()`, the application is checked instead of started, with the very options passed to `createApp()`:
+Both commands run the entry of the application (`src/main.ts`, or the file given: `soda check src/worker.ts`). When that file calls `createApp()`, the application is checked instead of started, with the very options passed to `createApp()`:
 
 - classes are created, since their `inject()` calls are their dependencies;
 - factories are not called: they open connections; their `inject` lists are checked;
@@ -51,9 +57,51 @@ What `createApp()` checks at startup, but all of it instead of the first error:
 
 Code before `createApp()` in the entry runs as usual: keep it free of side effects, as the templates do.
 
+## soda inspect
+
+```
+  soda inspect  3 modules · 5 providers · 4 routes  6 ms
+
+  DatabaseModule  global  exports Database
+    Database         factory  → Config(database) (ConfigModule (dynamic))
+
+  UsersModule  imports DatabaseModule  exports UsersService
+    UsersService     → UsersRepository, Logger (application)
+    UsersRepository  → Database (DatabaseModule)
+    UsersController  → UsersService
+
+  AppModule  imports ConfigModule (dynamic), DatabaseModule, UsersModule
+
+  GET     /users      UsersController.findAll  query page
+  GET     /users/:id  UsersController.findOne  JwtGuard
+  POST    /users      UsersController.create   body  JwtGuard
+  WS      /chat       ChatGateway              message, typing
+```
+
+Modules come imports first, the root last. Each provider lists what it injects, with the module that provides it when it is another one (`application` for what the application provides itself, such as the `Logger`); a dependency nobody provides is marked `✖`. An application with problems is described as far as it goes, and `soda check` says what is wrong.
+
+With `--json`, each route also has what it reads with its JSON Schema, its status and its module; each provider its kind and scope:
+
+```json
+{
+  "method": "GET",
+  "path": "/users/:id",
+  "handler": "UsersController.findOne",
+  "module": "UsersModule",
+  "inputs": [
+    { "kind": "param", "name": "id", "required": true, "schema": { "type": "integer" } },
+    { "kind": "query", "name": "full", "required": false, "schema": { "type": "boolean" } }
+  ],
+  "guards": ["JwtGuard"],
+  "interceptors": [],
+  "status": 200,
+  "sse": false
+}
+```
+
 ## For agents
 
-`--json` writes the report as data:
+`--json` writes either report as data:
 
 ```bash
 soda check --json
@@ -79,11 +127,11 @@ soda check --json
 }
 ```
 
-Each problem has a stable `code`, the place in your code and, when there is one obvious way, the `fix`. An agent can change the code, run `soda check --json`, and repeat until `ok` is `true`, in milliseconds and without a database.
+Each problem has a stable `code`, the place in your code and, when there is one obvious way, the `fix`. An agent can change the code, run `soda check --json`, and repeat until `ok` is `true`, in milliseconds and without a database. `soda inspect --json` answers what the application is made of (which module provides a service, which routes a guard protects, what a route expects) from the application itself, rather than from reading every file.
 
 ## In tests
 
-`checkApp()` is what the command runs:
+`checkApp()` and `inspectApp()` are what the commands run:
 
 ```ts
 import { checkApp } from '@getsoda/core'

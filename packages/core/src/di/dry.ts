@@ -54,3 +54,30 @@ export const STUB: unknown = new Proxy(stubTarget, {
   apply: () => STUB,
   construct: () => STUB as object,
 })
+
+/** A dependency a provider asked for in a dry run. */
+export interface DescribedDependency {
+  readonly token: string
+  readonly optional: boolean
+  /** Module whose provider answered, `application` for what the application provides (its `Logger`); `undefined` when none did. */
+  readonly from: string | undefined
+}
+
+export interface DescribedProvider {
+  readonly token: string
+  readonly kind: 'class' | 'value' | 'factory' | 'alias'
+  readonly scope: 'singleton' | 'transient'
+  /** What it injects, in the order it asked. */
+  readonly injects: readonly DescribedDependency[]
+}
+
+/** A module as the dry run saw it, for `soda inspect`. */
+export interface DescribedModule {
+  readonly name: string
+  readonly global: boolean
+  readonly imports: readonly string[]
+  /** Tokens, then re-exported modules. */
+  readonly exports: readonly string[]
+  readonly providers: readonly DescribedProvider[]
+  readonly controllers: readonly DescribedProvider[]
+}

@@ -156,8 +156,8 @@ describe('checkApp', () => {
     const globals = globalThis as Record<symbol, CheckHook | undefined>
     const { promise, resolve } = Promise.withResolvers<CheckReport>()
 
-    globals[CHECK_HOOK] = (report) => {
-      void report.then(resolve)
+    globals[CHECK_HOOK] = (app) => {
+      void app.check().then(resolve)
     }
 
     try {

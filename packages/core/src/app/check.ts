@@ -23,8 +23,9 @@ import { relative } from 'node:path'
 import { ConfigError } from '../config/config.ts'
 import { createDryContainer } from '../di/container.ts'
 import { DiError, provide } from '../di/index.ts'
-import type { ModuleImport } from '../di/index.ts'
+import type { Container, ModuleImport } from '../di/index.ts'
 import { buildRoutes, ControllerError, ROUTES } from '../http/index.ts'
+import type { BuiltRoutes } from '../http/index.ts'
 import { resolveMiddleware } from '../http/middleware.ts'
 import { Logger, SilentLogger } from '../logger/index.ts'
 import { compileRoutes } from '../routing/index.ts'
@@ -32,6 +33,7 @@ import { RouteError } from '../routing/errors.ts'
 import { FRAMEWORK, siteOf } from '../utils/errors.ts'
 import type { SourceSite } from '../utils/errors.ts'
 import type { AppOptions } from './app.ts'
+import type { InspectReport } from './inspect.ts'
 import { withGateways } from './serve.ts'
 
 /** One thing that would stop the application from starting. */
@@ -196,11 +198,17 @@ export const problemOf = (error: unknown): CheckProblem => {
   return { code: 'FAILED', message: `${error.name}: ${error.message}`, ...where }
 }
 
-/**
- * Checks `root` with the options `createApp()` would get, and reports every
- * problem found. Never throws and leaves nothing open.
- */
-export const checkApp = async (root: ModuleImport, options: AppOptions = {}): Promise<CheckReport> => {
+/** What a dry run of the application found: its problems, and what it built when it got that far. */
+export interface DryRun {
+  readonly problems: readonly CheckProblem[]
+  readonly container: Container | undefined
+  readonly built: BuiltRoutes | undefined
+  /** `performance.now()` when it began. */
+  readonly started: number
+}
+
+/** Builds the application as `createApp()` would, dry, collecting problems instead of failing. Never throws. */
+export const dryRun = async (root: ModuleImport, options: AppOptions = {}): Promise<DryRun> => {
   const started = performance.now()
   const problems = new Map<string, CheckProblem>()
 
@@ -211,12 +219,11 @@ export const checkApp = async (root: ModuleImport, options: AppOptions = {}): Pr
     problems.set(`${problem.code} ${problem.message}`, problem)
   }
 
-  let modules = 0
-  let providers = 0
-  let routes = 0
+  let container: Container | undefined
+  let built: BuiltRoutes | undefined
 
   try {
-    const container = await createDryContainer(
+    container = await createDryContainer(
       root,
       {
         ...options,
@@ -225,18 +232,15 @@ export const checkApp = async (root: ModuleImport, options: AppOptions = {}): Pr
       report
     )
 
-    modules = container.modules.length
-    providers = container.providerCount
+    const dry = container
 
     try {
-      resolveMiddleware(options.middleware ?? [], (fn) => container.runInContext(fn), () => undefined)
+      resolveMiddleware(options.middleware ?? [], (fn) => dry.runInContext(fn), () => undefined)
     } catch (error) {
       report(error)
     }
 
-    const built = buildRoutes(container, options, report)
-
-    routes = built.routes.length + built.gateways.length
+    built = buildRoutes(container, options, report)
     withGateways(compileRoutes(built.routes, options), built.gateways)
   } catch (error) {
     report(error)
@@ -244,11 +248,34 @@ export const checkApp = async (root: ModuleImport, options: AppOptions = {}): Pr
 
   files = undefined
 
-  return { ok: problems.size === 0, problems: [...problems.values()], duration: performance.now() - started, modules, providers, routes }
+  return { problems: [...problems.values()], container, built, started }
+}
+
+/**
+ * Checks `root` with the options `createApp()` would get, and reports every
+ * problem found. Never throws and leaves nothing open.
+ */
+export const checkApp = async (root: ModuleImport, options: AppOptions = {}): Promise<CheckReport> => {
+  const { problems, container, built, started } = await dryRun(root, options)
+
+  return {
+    ok: problems.length === 0,
+    problems,
+    duration: performance.now() - started,
+    modules: container?.modules.length ?? 0,
+    providers: container?.providerCount ?? 0,
+    routes: built === undefined ? 0 : built.routes.length + built.gateways.length,
+  }
 }
 
 /** Where `soda check` waits for the report: `createApp()` hands it over instead of starting. */
 export const CHECK_HOOK = Symbol.for('soda.check')
 
-/** Receives the report as soon as `createApp()` is called, before the check ends. */
-export type CheckHook = (report: Promise<CheckReport>) => void
+/** What `createApp()` hands to `soda check` and `soda inspect`: the application, to check or describe. */
+export interface CheckedApp {
+  check(): Promise<CheckReport>
+  inspect(): Promise<InspectReport>
+}
+
+/** Called as soon as `createApp()` is, with the application instead of starting it. */
+export type CheckHook = (app: CheckedApp) => void

@@ -8,7 +8,7 @@ A class-based web framework for [Bun](https://bun.sh): modules, dependency injec
 - **Typed requests.** Path parameters are typed from the route path; bodies are validated with any [Standard Schema](https://standardschema.dev) library (zod, valibot, arktype).
 - **Request pipeline.** Guards, interceptors and exception filters, as classes, instances or functions.
 - **Lifecycle.** Graceful shutdown that drains requests before destroying services, shutdown signals, `bun --hot` support.
-- **`soda check`.** Every problem that would stop the application from starting, at once, with the line of code and the fix, without starting it; `--json` for agents.
+- **`soda check`, `soda inspect`.** Every problem that would stop the application from starting, at once, with the line of code and the fix; the modules, dependencies and routes as data. Without starting it; `--json` for agents.
 
 > Soda is in early development (0.x): the API may change between minor versions.
 

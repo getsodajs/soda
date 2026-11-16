@@ -23,7 +23,7 @@ import type { InjectionContext } from './context.ts'
 import { Module } from './decorators.ts'
 import type { DynamicModule, ModuleClass, ModuleImport } from './decorators.ts'
 import { isSafeToCheck, STUB } from './dry.ts'
-import type { ReportProblem } from './dry.ts'
+import type { DescribedDependency, DescribedModule, DescribedProvider, ReportProblem } from './dry.ts'
 import { DiError } from './errors.ts'
 import { buildGraph } from './graph.ts'
 import type { ModuleGraph, ModuleNode, ProviderNode } from './graph.ts'
@@ -58,6 +58,16 @@ export interface ContainerOptions {
 /** Module holding `ContainerOptions.providers`. */
 @Module({})
 class ContainerProvidersModule {}
+
+/** Name of a module in descriptions: `application` for the one holding what the application provides. */
+const moduleName = (module: ModuleNode): string => (module.moduleClass === ContainerProvidersModule ? 'application' : module.name)
+
+const KINDS: Readonly<Record<ProviderDefinition['kind'], DescribedProvider['kind']>> = {
+  class: 'class',
+  value: 'value',
+  factory: 'factory',
+  existing: 'alias',
+}
 
 const providersModule = (providers: readonly Provider[]): DynamicModule => {
   const exports: Token<unknown>[] = []
@@ -134,14 +144,41 @@ class Resolver {
   readonly #report: ReportProblem | undefined
   /** Stubs handed out in a dry run, to tell a class failing on its own from one failing on a stub. */
   #stubs = 0
+  /** In a dry run, what each provider asked for, by token. */
+  readonly dependencies = new Map<ProviderNode, Map<Token<unknown>, DescribedDependency>>()
 
   constructor(graph: ModuleGraph, report?: ReportProblem) {
     this.#graph = graph
     this.#report = report
   }
 
-  /** Provider for `token` as seen from `module`. */
+  /** Provider for `token` as seen from `module`; in a dry run, recorded as a dependency of the provider being created. */
   lookup(module: ModuleNode, token: Token<unknown>, optional: boolean): ProviderNode | undefined {
+    const requester = this.#report === undefined ? undefined : this.#stack.at(-1)
+
+    if (requester === undefined) {
+      return this.#find(module, token, optional)
+    }
+
+    let found: ProviderNode | undefined
+
+    try {
+      found = this.#find(module, token, optional)
+
+      return found
+    } finally {
+      let asked = this.dependencies.get(requester)
+
+      if (asked === undefined) {
+        asked = new Map()
+        this.dependencies.set(requester, asked)
+      }
+
+      asked.set(token, { token: tokenName(token), optional, from: found === undefined ? undefined : moduleName(found.module) })
+    }
+  }
+
+  #find(module: ModuleNode, token: Token<unknown>, optional: boolean): ProviderNode | undefined {
     const providers = visibleProviders(module, token, this.#graph.globals)
 
     if (providers.size === 1) {
@@ -536,6 +573,34 @@ class StartedContainer implements Container {
     return count
   }
 
+  /** The modules and what each provider injects, as a dry run recorded it. */
+  describe(): DescribedModule[] {
+    const described: DescribedModule[] = []
+    const describeNode = (node: ProviderNode): DescribedProvider => ({
+      token: tokenName(node.token),
+      kind: KINDS[node.definition.kind],
+      scope: node.scope,
+      injects: [...(this.#resolver.dependencies.get(node)?.values() ?? [])],
+    })
+
+    for (const module of this.#graph.modules) {
+      if (module.moduleClass === ContainerProvidersModule) {
+        continue
+      }
+
+      described.push({
+        name: module.name,
+        global: module.global,
+        imports: module.imports.map(moduleName),
+        exports: [...[...module.exportedTokens].map(tokenName), ...[...module.exportedModules].map((exported) => exported.name)],
+        providers: [...module.providers.values()].map(describeNode),
+        controllers: module.controllers.map(describeNode),
+      })
+    }
+
+    return described
+  }
+
   get modules(): readonly ModuleClass[] {
     const modules: ModuleClass[] = []
 
@@ -739,3 +804,7 @@ export const createDryContainer = async (root: ModuleImport, options: ContainerO
 
   return new StartedContainer(graph, resolver, controllers)
 }
+
+/** What a container made by `createDryContainer` recorded; nothing for another one. */
+export const describeContainer = (container: Container): DescribedModule[] =>
+  container instanceof StartedContainer ? container.describe() : []
