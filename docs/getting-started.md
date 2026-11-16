@@ -126,6 +126,8 @@ import type { User } from './users.service.ts'
 
 const CreateUser = z.object({ name: z.string().min(1) })
 
+type CreateUser = z.infer<typeof CreateUser>
+
 @Controller('users')
 export class UsersController {
   readonly #users = inject(UsersService)
@@ -142,7 +144,7 @@ export class UsersController {
   }
 
   @Post([body(CreateUser)])
-  create(input: z.infer<typeof CreateUser>): User {
+  create(input: CreateUser): User {
     return this.#users.create(input.name)
   }
 }

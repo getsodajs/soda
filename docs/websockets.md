@@ -8,6 +8,8 @@ import type { GatewaySocket, OnGatewayConnection, OnGatewayDisconnect } from '@g
 
 const Say = z.object({ text: z.string().min(1).max(500) })
 
+type Say = z.infer<typeof Say>
+
 @WebSocketGateway('/chat')
 @UseGuards(JwtGuard)
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -18,7 +20,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(client: GatewaySocket, code: number) {}
 
   @SubscribeMessage('say', [data(Say), value(JWT_PAYLOAD), socket()])
-  say(message: z.infer<typeof Say>, user: JwtPayload, client: GatewaySocket) {
+  say(message: Say, user: JwtPayload, client: GatewaySocket) {
     client.publish('lobby', JSON.stringify({ event: 'said', data: { user: user.sub, text: message.text } }))
 
     return { event: 'sent', data: null } // sent back to this client

@@ -158,6 +158,8 @@ A gateway is listed in `controllers` like a controller. Its class guards run on 
 ```ts
 const Say = z.object({ text: z.string().min(1) })
 
+type Say = z.infer<typeof Say>
+
 @WebSocketGateway('/chat')
 @UseGuards(JwtGuard) // browsers send cookies with the handshake
 class ChatGateway implements OnGatewayConnection {
@@ -166,7 +168,7 @@ class ChatGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('say', [data(Say), value(JWT_PAYLOAD), socket()])
-  say(message: z.infer<typeof Say>, user: JwtPayload, client: GatewaySocket) {
+  say(message: Say, user: JwtPayload, client: GatewaySocket) {
     client.publish('room', JSON.stringify({ event: 'said', data: { user: user.sub, text: message.text } }))
     return { event: 'sent' } // sent back to this socket
   }

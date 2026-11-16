@@ -7,6 +7,8 @@ import type { User } from './users.service.ts'
 
 const CreateUser = z.object({ name: z.string().trim().min(1) })
 
+type CreateUser = z.infer<typeof CreateUser>
+
 @Controller('users')
 export class UsersController {
   readonly #users = inject(UsersService)
@@ -29,7 +31,7 @@ export class UsersController {
 
   @Post([body(CreateUser), value(JWT_PAYLOAD)])
   @UseGuards(JwtGuard)
-  create(input: z.infer<typeof CreateUser>, author: JwtPayload): User {
+  create(input: CreateUser, author: JwtPayload): User {
     return this.#users.create(input.name, author.sub ?? 'unknown')
   }
 }

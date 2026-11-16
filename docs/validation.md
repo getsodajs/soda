@@ -11,9 +11,13 @@ const CreateUser = z.object({
   age: z.number().int().optional(),
 })
 
+type CreateUser = z.infer<typeof CreateUser>
+
 @Post([body(CreateUser)])
-create(input: z.infer<typeof CreateUser>) {}
+create(input: CreateUser) {}
 ```
+
+The type is declared once, under the schema's name: `CreateUser` is then both the schema and the type, and one import brings both. The decorator checks the method against it, so `create(input: string)` with `body(CreateUser)` is a type error.
 
 ## Bodies
 
@@ -74,8 +78,10 @@ const Profile = z.object({
   avatar: z.instanceof(File),
 })
 
+type Profile = z.infer<typeof Profile>
+
 @Post('profile', [form(Profile, { maxFileSize: 2 * 1024 * 1024, maxFiles: 1 })])
-update(profile: z.infer<typeof Profile>) {}
+update(profile: Profile) {}
 ```
 
 - A repeated field, or a field named `tags[]`, is an array.

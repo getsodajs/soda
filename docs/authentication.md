@@ -26,13 +26,15 @@ export class AuthModule {}
 ```ts
 const Login = z.object({ email: z.email(), password: z.string() })
 
+type Login = z.infer<typeof Login>
+
 @Controller('auth')
 export class AuthController {
   readonly #jwt = inject(JwtService)
   readonly #users = inject(UsersService)
 
   @Post('login', [body(Login), context()])
-  async login(input: z.infer<typeof Login>, ctx: Context) {
+  async login(input: Login, ctx: Context) {
     const user = await this.#users.verify(input.email, input.password) // throws UnauthorizedException
 
     const token = await this.#jwt.sign({ sub: String(user.id) })

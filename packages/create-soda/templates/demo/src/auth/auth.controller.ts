@@ -7,6 +7,8 @@ import { TOKEN_COOKIE, TOKEN_LIFETIME } from './token.ts'
 
 const Login = z.object({ name: z.string().trim().min(1) })
 
+type Login = z.infer<typeof Login>
+
 @Controller('auth')
 export class AuthController {
   readonly #jwt = inject(JwtService)
@@ -17,7 +19,7 @@ export class AuthController {
    * where scripts cannot read it.
    */
   @Post('login', [body(Login), context()])
-  async login(input: z.infer<typeof Login>, ctx: Context): Promise<{ token: string }> {
+  async login(input: Login, ctx: Context): Promise<{ token: string }> {
     const token = await this.#jwt.sign({ sub: input.name })
 
     ctx.cookies.set(TOKEN_COOKIE, token, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: TOKEN_LIFETIME })

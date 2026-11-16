@@ -11,9 +11,11 @@ const Avatar = z.object({
     .refine((file) => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type), 'PNG, JPEG or WebP is expected'),
 })
 
+type Avatar = z.infer<typeof Avatar>
+
 @Post('me/avatar', [form(Avatar, { maxFileSize: 2 * 1024 * 1024, maxFiles: 1 }), value(USER)])
 @HttpCode(204)
-async uploadAvatar(input: z.infer<typeof Avatar>, user: User) {
+async uploadAvatar(input: Avatar, user: User) {
   await Bun.write(`uploads/${user.id}.img`, input.avatar)
 }
 ```
@@ -32,8 +34,10 @@ const Album = z.object({
   photos: z.array(z.instanceof(File)).min(1).max(20),
 })
 
+type Album = z.infer<typeof Album>
+
 @Post('albums', [form(Album, { maxFileSize: 10 * 1024 * 1024, maxFiles: 20, maxBodySize: 100 * 1024 * 1024 })])
-create(album: z.infer<typeof Album>) {}
+create(album: Album) {}
 ```
 
 A single `photos` field gives a single `File`, not an array: `z.array()` then refuses it. Name the field `photos[]` in the client to always get an array.
