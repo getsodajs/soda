@@ -25,15 +25,16 @@ const responses = createDecorator<Readonly<Record<number, ApiResponseOptions>>>(
 const bearer = createDecorator<boolean>('ApiBearerAuth')
 const exclude = createDecorator<boolean>('ApiExclude')
 
-/** Summary, description and deprecation of an operation. */
+/** Summary, description and deprecation of an operation; on a method, its fields win over those of the controller. */
 export const ApiOperation = (options: ApiOperationOptions): ClassOrMethodDecorator => operation(options)
 
-/** Tags grouping operations, on a controller or a method (which wins). */
+/** Tags grouping operations; those of a method add to those of its controller. */
 export const ApiTags = (...names: string[]): ClassOrMethodDecorator => tags(names)
 
 /**
- * Responses of an operation, by status. Without it, the operation has the
- * status of its route (`200`, `201` for `POST`, or `@HttpCode()`).
+ * Responses of an operation, by status. They add to the success of the route
+ * (`200`, `201` for `POST`, or `@HttpCode()`), replacing it when they declare
+ * its status; those of a method add to those of the controller, the same way.
  *
  * ```ts
  * @ApiResponses({ 200: { description: 'The user', schema: User }, 404: { description: 'No such user' } })

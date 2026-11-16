@@ -198,6 +198,7 @@ describe('decorators', () => {
   @ApiTags('orders')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'An order operation', deprecated: true })
+  @ApiResponses({ 401: { description: 'No token' } })
   class OrdersController {
     @Get('mine')
     @ApiTags('me')
@@ -208,6 +209,12 @@ describe('decorators', () => {
 
     @Get()
     list(): null {
+      return null
+    }
+
+    @Post([body(CreateUser)])
+    @ApiResponses({ 201: { description: 'The order', schema: User }, 401: { description: 'Expired token' }, 409: { description: 'Already placed' } })
+    place(): null {
       return null
     }
   }
@@ -221,15 +228,31 @@ describe('decorators', () => {
     }
   }
 
-  it('applies those of the class to every route, those of a method winning over them', async () => {
+  const document = async (): Promise<OpenApiDocument> => {
     const tested = await createTestApp(defineModule([OrdersController, AdminController]))
-    const document = (await (await tested.request('/openapi.json')).json()) as OpenApiDocument
+    const json = (await (await tested.request('/openapi.json')).json()) as OpenApiDocument
 
     await tested.close()
 
-    expect(Object.keys(document.paths)).toEqual(['/orders/mine', '/orders'])
-    expect(document.paths['/orders/mine']!.get).toMatchObject({ summary: 'My orders', tags: ['me'], security: [{ bearer: [] }] })
-    expect(document.paths['/orders/mine']!.get!.deprecated).toBeUndefined()
-    expect(document.paths['/orders']!.get).toMatchObject({ summary: 'An order operation', deprecated: true, tags: ['orders'], security: [{ bearer: [] }] })
+    return json
+  }
+
+  it('adds those of a method to those of its controller, the method winning field by field', async () => {
+    const { paths } = await document()
+
+    expect(Object.keys(paths)).toEqual(['/orders/mine', '/orders'])
+    expect(paths['/orders/mine']!.get).toMatchObject({ summary: 'My orders', deprecated: true, tags: ['orders', 'me'], security: [{ bearer: [] }] })
+    expect(paths['/orders']!.get).toMatchObject({ summary: 'An order operation', deprecated: true, tags: ['orders'], security: [{ bearer: [] }] })
+  })
+
+  it('keeps the success of the route, declared responses adding to it or replacing it by status', async () => {
+    const { paths } = await document()
+
+    expect(paths['/orders']!.get!.responses).toEqual({ 200: { description: 'Success' }, 401: { description: 'No token' } })
+    expect(paths['/orders']!.post!.responses).toEqual({
+      201: { description: 'The order', content: { 'application/json': { schema: expect.objectContaining({ required: ['id', 'name'] }) } } },
+      401: { description: 'Expired token' },
+      409: { description: 'Already placed' },
+    })
   })
 })

@@ -10,6 +10,7 @@
  */
 
 import type { Argument } from '../http/arguments.ts'
+import { getClassEnhancers } from '../http/enhancers.ts'
 import type { Parser } from '../http/parsers.ts'
 import type { MappedController, MappedRoute } from '../http/routes.ts'
 import { isStandardSchema } from '../http/schema.ts'
@@ -142,23 +143,35 @@ const requestBody = (args: readonly Argument<unknown>[]): OpenApiOperation['requ
   return { required: !isOptional(body.source), content: Object.fromEntries(types.map((type) => [type, { schema }])) }
 }
 
-const responsesOf = (route: MappedRoute): OpenApiOperation['responses'] => {
-  const declared = route.info.metadata.get(KEYS.responses) as Readonly<Record<number, ApiResponseOptions>> | undefined
+/**
+ * A decorator's value on the controller and on the method, apart: the route's
+ * metadata only keeps the method's. The same value means the method declared none.
+ */
+const layersOf = <T>(info: MappedRoute['info'], key: symbol): readonly [T | undefined, T | undefined] => {
+  const inherited = getClassEnhancers(info.controller).metadata.get(key) as T | undefined
+  const value = info.metadata.get(key) as T | undefined
 
-  if (declared === undefined) {
-    return route.sse
-      ? { 200: { description: 'Event stream', content: { 'text/event-stream': { schema: STRING } } } }
-      : { [route.status]: { description: 'Success' } }
+  return [inherited, value === inherited ? undefined : value]
+}
+
+const describeResponse = (response: ApiResponseOptions): OpenApiOperation['responses'][string] =>
+  response.schema === undefined
+    ? { description: response.description }
+    : { description: response.description, content: { 'application/json': { schema: toJsonSchema(response.schema) } } }
+
+/** The success of the route, then the declared responses: of the controller, then of the method, by status. */
+const responsesOf = (route: MappedRoute): OpenApiOperation['responses'] => {
+  const responses: Record<string, OpenApiOperation['responses'][string]> = route.sse
+    ? { 200: { description: 'Event stream', content: { 'text/event-stream': { schema: STRING } } } }
+    : { [route.status]: { description: 'Success' } }
+
+  for (const declared of layersOf<Readonly<Record<number, ApiResponseOptions>>>(route.info, KEYS.responses)) {
+    for (const [status, response] of Object.entries(declared ?? {})) {
+      responses[status] = describeResponse(response)
+    }
   }
 
-  return Object.fromEntries(
-    Object.entries(declared).map(([status, response]) => [
-      status,
-      response.schema === undefined
-        ? { description: response.description }
-        : { description: response.description, content: { 'application/json': { schema: toJsonSchema(response.schema) } } },
-    ])
-  )
+  return responses
 }
 
 const operationOf = (route: MappedRoute, segments: readonly Segment[], suffix: string): OpenApiOperation => {
@@ -172,8 +185,11 @@ const operationOf = (route: MappedRoute, segments: readonly Segment[], suffix: s
     }
   }
 
-  const options = (info.metadata.get(KEYS.operation) as ApiOperationOptions | undefined) ?? {}
-  const tags = info.metadata.get(KEYS.tags) as readonly string[] | undefined
+  // A method's operation and tags add to those of its controller.
+  const [inheritedOperation, ownOperation] = layersOf<ApiOperationOptions>(info, KEYS.operation)
+  const options = { ...inheritedOperation, ...ownOperation }
+  const [inheritedTags, ownTags] = layersOf<readonly string[]>(info, KEYS.tags)
+  const tags = inheritedTags === undefined && ownTags === undefined ? undefined : [...new Set([...(inheritedTags ?? []), ...(ownTags ?? [])])]
   const body = requestBody(args)
 
   return {

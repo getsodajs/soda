@@ -115,7 +115,22 @@ export class UsersController {
 | `@ApiBearerAuth()` | needs `Authorization: Bearer` |
 | `@ApiExclude()` | left out of the document |
 
-On a class, they apply to every route; on a method, they win over the class.
+On a class, they apply to every route; on a method, they add to the class:
+
+- `@ApiTags`: the tags of both;
+- `@ApiOperation`: the fields of the class, those the method gives replacing them;
+- `@ApiResponses`: the success of the route, `201 Success` here, always stays; declared statuses add to it, and a declared `201` replaces it. Those of a method replace those of the class status by status, so a `401` on the controller documents every route.
+
+```ts
+@Controller('orders')
+@ApiResponses({ 401: { description: 'No token' } })
+export class OrdersController {
+  @Post([body(PlaceOrder)])
+  @ApiResponses({ 409: { description: 'Already placed' } })
+  place(input: PlaceOrder) {}
+  // responses: 201 Success, 401 No token, 409 Already placed
+}
+```
 
 ## The document itself
 
