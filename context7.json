@@ -1,7 +1,5 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
-  "url": "https://context7.com/getsodajs/soda",
-  "public_key": "pk_f6S0ueowrBfvOyWxrQCms",
   "projectTitle": "Soda",
   "description": "Class-based web framework for Bun (npm @getsoda/core): modules, dependency injection, controllers, guards, interceptors and exception filters written with standard TC39 decorators, compiled into Bun's native router. Validation with Standard Schema (zod, valibot, arktype), OpenAPI, JWT, rate limiting, WebSockets and server-sent events included.",
   "folders": [
