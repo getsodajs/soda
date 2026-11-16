@@ -19,6 +19,57 @@ export class AppModule {}
 
 The document is served at `/openapi.json` (the `path` option changes it), Swagger UI at `ui` when given; both follow the global prefix.
 
+## From your schemas
+
+The schema a route validates with is the one documented. Written once, it checks the request, types the handler and describes the route:
+
+```ts
+const CreateUser = z.object({
+  name: z.string().min(1),
+  email: z.email(),
+  age: z.number().int().optional(),
+})
+
+type CreateUser = z.infer<typeof CreateUser>
+
+@Controller('users')
+export class UsersController {
+  @Get(':id', [param('id', int), query('full', z.stringbool().optional())])
+  findOne(id: number, full: boolean | undefined) {}
+
+  @Post([body(CreateUser)])
+  create(input: CreateUser) {}
+}
+```
+
+gives, with no decorator:
+
+```json
+"/users/{id}": { "get": {
+  "operationId": "UsersController_findOne",
+  "parameters": [
+    { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+    { "name": "full", "in": "query", "required": false, "schema": { "type": "string" } }
+  ],
+  "responses": { "200": { "description": "Success" } }
+} },
+"/users": { "post": {
+  "operationId": "UsersController_create",
+  "requestBody": { "required": true, "content": { "application/json": { "schema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string", "minLength": 1 },
+      "email": { "type": "string", "format": "email", "pattern": "..." },
+      "age": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 }
+    },
+    "required": ["name", "email"]
+  } } } },
+  "responses": { "201": { "description": "Success" } }
+} }
+```
+
+A query value is described as what the client sends, a string, before `z.stringbool()` turns it into a boolean. Change the schema and the document follows: a field made optional leaves `required`, a `.max(100)` becomes `maxLength`. What the handler returns is not known at runtime: describe responses with `@ApiResponses()`, below.
+
 ## What is described
 
 From each route, without decorators:

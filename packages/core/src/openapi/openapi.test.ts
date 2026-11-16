@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import { Module } from '../di/index.ts'
+import type { Constructor, ModuleClass } from '../di/index.ts'
 import { body, cookie, form, header, param, query } from '../http/arguments.ts'
 import { All, Controller, Get, HttpCode, Post, Sse } from '../http/decorators.ts'
 import { int, uuid } from '../http/parsers.ts'
@@ -65,6 +66,13 @@ class UsersController {
 class AppModule {}
 
 const app = await createTestApp(AppModule, { prefix: 'api' })
+
+const defineModule = (controllers: readonly Constructor<unknown>[]): ModuleClass => {
+  @Module({ imports: [OpenApiModule.forRoot({ info: { title: 'Shop', version: '1.0.0' } })], controllers })
+  class DecoratedModule {}
+
+  return DecoratedModule
+}
 
 afterAll(() => app.close())
 
@@ -182,5 +190,46 @@ describe('OpenApiModule', () => {
     expect(response.headers.get('content-type')).toBe('text/html;charset=utf-8')
     expect(html).toContain('<title>Shop</title>')
     expect(html).toContain('SwaggerUIBundle({ url: "/api/openapi.json"')
+  })
+})
+
+describe('decorators', () => {
+  @Controller('orders')
+  @ApiTags('orders')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'An order operation', deprecated: true })
+  class OrdersController {
+    @Get('mine')
+    @ApiTags('me')
+    @ApiOperation({ summary: 'My orders' })
+    mine(): null {
+      return null
+    }
+
+    @Get()
+    list(): null {
+      return null
+    }
+  }
+
+  @Controller('admin')
+  @ApiExclude()
+  class AdminController {
+    @Get()
+    stats(): null {
+      return null
+    }
+  }
+
+  it('applies those of the class to every route, those of a method winning over them', async () => {
+    const tested = await createTestApp(defineModule([OrdersController, AdminController]))
+    const document = (await (await tested.request('/openapi.json')).json()) as OpenApiDocument
+
+    await tested.close()
+
+    expect(Object.keys(document.paths)).toEqual(['/orders/mine', '/orders'])
+    expect(document.paths['/orders/mine']!.get).toMatchObject({ summary: 'My orders', tags: ['me'], security: [{ bearer: [] }] })
+    expect(document.paths['/orders/mine']!.get!.deprecated).toBeUndefined()
+    expect(document.paths['/orders']!.get).toMatchObject({ summary: 'An order operation', deprecated: true, tags: ['orders'], security: [{ bearer: [] }] })
   })
 })
