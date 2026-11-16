@@ -24,6 +24,9 @@ export type ContextParams<P extends string> = string extends P ? AnyParams : Rea
 /** Names of the parameters of a route path. */
 export type ParamNameOf<P extends string> = string extends P ? string : keyof PathParams<P> & string
 
+/** Adds the headers set through `ctx.responseHeaders` to the response of the request. */
+export const FINISH = Symbol('finish')
+
 /**
  * The route a request is served by: the part of Nest's `ExecutionContext`
  * (`getClass()`, `getHandler()`) guards and interceptors need. Built once per route.
@@ -60,6 +63,7 @@ export class Context<P extends string = string> {
   #search: URLSearchParams | undefined
   #body: { readonly kind: 'JSON' | 'form'; readonly value: Promise<unknown> } | undefined
   #values: Map<ContextKey<unknown>, unknown> | undefined
+  #responseHeaders: Headers | undefined
 
   constructor(
     readonly req: Bun.BunRequest,
@@ -76,6 +80,38 @@ export class Context<P extends string = string> {
    */
   get ip(): string | undefined {
     return this.server?.requestIP(this.req)?.address
+  }
+
+  /**
+   * Headers added to the response, whatever it is: a returned value, a
+   * returned `Response` or an error. Like Nest's `res.header()`. Created on
+   * first use; a request that never uses it pays nothing.
+   *
+   * ```ts
+   * ctx.responseHeaders.set('x-rate-limit-remaining', '9')
+   * ```
+   */
+  get responseHeaders(): Headers {
+    this.#responseHeaders ??= new Headers()
+
+    return this.#responseHeaders
+  }
+
+  /** @internal */
+  [FINISH](response: Response): Response {
+    const extra = this.#responseHeaders
+
+    // A WebSocket handshake that upgraded answers with no response at all.
+    if (extra === undefined || response === undefined) {
+      return response
+    }
+
+    // Bun's responses all have mutable headers, fetched ones included.
+    for (const [name, value] of extra) {
+      response.headers.set(name, value)
+    }
+
+    return response
   }
 
   /** Attaches a value to this request, for the guards, interceptors and handler that follow. */

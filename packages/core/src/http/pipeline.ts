@@ -15,7 +15,7 @@
 import type { ClassToken, Constructor } from '../di/index.ts'
 import type { Handler } from '../routing/index.ts'
 import { isThenable } from '../utils/promise.ts'
-import { Context } from './context.ts'
+import { Context, FINISH } from './context.ts'
 import type { RouteInfo } from './context.ts'
 import { getCaughtExceptions } from './enhancers.ts'
 import type { CallHandler, CanActivate, ExceptionFilter, FilterLike, Guard, Interceptor, InterceptorLike } from './enhancers.ts'
@@ -221,9 +221,7 @@ export const createPipeline = (parts: PipelineParts): Handler => {
     }
   }
 
-  const handler: Handler = (req, params, server) => {
-    const ctx = new Context(req, params, route, server)
-
+  const serve = (ctx: Context): Response | Promise<Response> => {
     try {
       const gate = hasGuards ? runGuards(guards, ctx, 0) : undefined
       const result = gate === undefined ? run(ctx) : gate.then(() => run(ctx))
@@ -238,6 +236,13 @@ export const createPipeline = (parts: PipelineParts): Handler => {
     } catch (error) {
       return fail(error, ctx)
     }
+  }
+
+  const handler: Handler = (req, params, server) => {
+    const ctx = new Context(req, params, route, server)
+    const response = serve(ctx)
+
+    return response instanceof Promise ? response.then((ready) => ctx[FINISH](ready)) : ctx[FINISH](response)
   }
 
   // Shows up in stack traces and profiles, as in Nest.

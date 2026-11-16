@@ -5,6 +5,7 @@ import { compileRoutes, RouteError } from '../routing/index.ts'
 import { body, context, form, header, param, query } from './arguments.ts'
 import type { Context } from './context.ts'
 import { All, Controller, Delete, Get, Header, HttpCode, Patch, Post, Route } from './decorators.ts'
+import { UseGuards } from './enhancers.ts'
 import { ControllerError } from './errors.ts'
 import { HttpException, NotFoundException } from './exceptions.ts'
 import { int } from './parsers.ts'
@@ -302,6 +303,46 @@ describe('arguments', () => {
     expect(((await proto.json()) as { message: string }).message).toBe('Request body contains a forbidden prototype property')
     expect(escaped.status).toBe(400)
     expect(constructorField.status).toBe(201)
+  })
+
+  it('adds ctx.responseHeaders to every response: a value, a Response, an error', async () => {
+    const tag = (ctx: Context): boolean => {
+      ctx.responseHeaders.set('x-tag', 'set by a guard')
+
+      return true
+    }
+
+    @Controller('/tagged')
+    @UseGuards(tag)
+    class TaggedController {
+      @Get('value')
+      value(): string {
+        return 'v'
+      }
+
+      @Get('response')
+      response(): Response {
+        return new Response('r', { headers: { 'x-own': 'kept' } })
+      }
+
+      @Get('error')
+      error(): never {
+        throw new NotFoundException()
+      }
+    }
+
+    @Module({ controllers: [TaggedController] })
+    class TaggedModule {}
+
+    const request = await serve(TaggedModule)
+    const responses = await Promise.all(['value', 'response', 'error'].map((path) => request('GET', `/tagged/${path}`)))
+
+    expect(responses.map((response) => [response.status, response.headers.get('x-tag')])).toEqual([
+      [200, 'set by a guard'],
+      [200, 'set by a guard'],
+      [404, 'set by a guard'],
+    ])
+    expect(responses[1]!.headers.get('x-own')).toBe('kept')
   })
 
   it('gives param() the parameters of the controller path', async () => {
