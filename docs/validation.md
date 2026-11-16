@@ -82,11 +82,11 @@ update(profile: z.infer<typeof Profile>) {}
 - Files are `File` objects. Their `type` is what the client declared: check the content itself when it matters.
 - Limits answer `413` past them: `maxBodySize` (bytes of the body, refused as soon as it is exceeded, before it is read entirely), `maxFileSize`, `maxFiles` and `maxFields`.
 
-`form(limits)` without schema gives the fields as they are. See also [File uploads](https://getsodajs.github.io/soda/docs/recipes/file-uploads.md).
+`form(limits)` without schema gives the fields as they are. See also [File uploads](https://getsodajs.github.io/docs/recipes/file-uploads.md).
 
 ## Signed cookies
 
-`signed(signer)` checks a cookie's signature, as a parser: see [Authentication](https://getsodajs.github.io/soda/docs/authentication.md#cookies).
+`signed(signer)` checks a cookie's signature, as a parser: see [Authentication](https://getsodajs.github.io/docs/authentication.md#cookies).
 
 ## Writing a parser
 

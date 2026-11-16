@@ -59,7 +59,7 @@ Soda uses neither. What a method receives is listed in its route decorator, and 
 - **Microservices** (`@nestjs/microservices`: Kafka, NATS, gRPC transports): use the client of your broker in a provider.
 - **GraphQL** (`@nestjs/graphql`): mount `graphql-yoga` on a route.
 - **CLI generators** (`nest g resource`): `bun create soda` creates projects, not files.
-- **Queues, cron, cache, health, CQRS, i18n modules:** a provider wrapping the library you choose does it; see [Database](https://getsodajs.github.io/soda/docs/recipes/database.md) for the pattern.
+- **Queues, cron, cache, health, CQRS, i18n modules:** a provider wrapping the library you choose does it; see [Database](https://getsodajs.github.io/docs/recipes/database.md) for the pattern.
 
 ## Speed
 

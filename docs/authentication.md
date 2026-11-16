@@ -142,4 +142,4 @@ With a list of secrets, cookies are signed with the first and accepted with any:
 
 ## WebSockets
 
-Browsers send cookies with the WebSocket handshake but cannot set an `Authorization` header there: a gateway is protected by `JwtGuard` reading the cookie. See [WebSockets](https://getsodajs.github.io/soda/docs/websockets.md#guards).
+Browsers send cookies with the WebSocket handshake but cannot set an `Authorization` header there: a gateway is protected by `JwtGuard` reading the cookie. See [WebSockets](https://getsodajs.github.io/docs/websockets.md#guards).

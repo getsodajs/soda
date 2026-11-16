@@ -31,7 +31,7 @@ Nest destroys services while its server still accepts requests; here no request 
 
 Behind nginx, a load balancer or a platform's router, the peer of every request is the proxy:
 
-- `ctx.ip` is the proxy's address. Read the client from `x-forwarded-for`, only the part your proxy appends: see [Rate limiting](https://getsodajs.github.io/soda/docs/rate-limiting.md#who-is-a-client).
+- `ctx.ip` is the proxy's address. Read the client from `x-forwarded-for`, only the part your proxy appends: see [Rate limiting](https://getsodajs.github.io/docs/rate-limiting.md#who-is-a-client).
 - `ctx.url` has the scheme and host the proxy used to reach the application.
 - Cookies with `secure: true` need HTTPS between the browser and the proxy, which is the usual setup.
 
@@ -42,7 +42,7 @@ Behind nginx, a load balancer or a platform's router, the peer of every request 
 | request body | `app.listen({ maxRequestBodySize })` | Bun's 128 MiB |
 | form body, files | `form(schema, { maxBodySize, maxFileSize, maxFiles, maxFields })` | none beyond the request body |
 | WebSocket frame | `app.listen({ websocket: { maxPayloadLength } })` | Bun's 16 MiB |
-| requests per client | [Rate limiting](https://getsodajs.github.io/soda/docs/rate-limiting.md) | none |
+| requests per client | [Rate limiting](https://getsodajs.github.io/docs/rate-limiting.md) | none |
 
 Lower the body limit to what your routes accept: a megabyte is plenty for JSON APIs.
 
@@ -52,7 +52,7 @@ await app.listen({ port: 3000, maxRequestBodySize: 1024 * 1024 })
 
 ## Logs
 
-`new ConsoleLogger({ json: true })` writes one JSON object per line, for log collectors. See [Logging](https://getsodajs.github.io/soda/docs/logging.md).
+`new ConsoleLogger({ json: true })` writes one JSON object per line, for log collectors. See [Logging](https://getsodajs.github.io/docs/logging.md).
 
 ## Errors
 
