@@ -11,6 +11,8 @@ A class-based web framework for [Bun](https://bun.sh): modules, dependency injec
 
 > Soda is in early development (0.x): the API may change between minor versions.
 
+**[Documentation](https://github.com/getsodajs/soda/tree/main/docs)**: a guide per topic, recipes, and a map from Nest.
+
 ## Performance
 
 Over HTTP, Soda keeps about 94% of the throughput of Bun's native routes alone, on par with Hono and about twice that of Nest on Fastify ([benchmark](https://github.com/getsodajs/soda/tree/main/bench/http)):
@@ -150,9 +152,11 @@ async *ticks(): AsyncGenerator<SseMessage> {
 
 ## WebSockets
 
-A gateway is listed in `controllers` like a controller; its guards run on the handshake, and frames follow the protocol of Nest's `WsAdapter`, `{ "event": "...", "data": ... }`:
+A gateway is listed in `controllers` like a controller. Its class guards run on the handshake, a method's guards on each of its messages, and frames follow the protocol of Nest's `WsAdapter`, `{ "event": "...", "data": ... }`:
 
 ```ts
+const Say = z.object({ text: z.string().min(1) })
+
 @WebSocketGateway('/chat')
 @UseGuards(JwtGuard) // browsers send cookies with the handshake
 class ChatGateway implements OnGatewayConnection {
@@ -160,17 +164,15 @@ class ChatGateway implements OnGatewayConnection {
     socket.subscribe('room')
   }
 
-  @SubscribeMessage('say')
-  say(data: string, socket: GatewaySocket) {
-    const user = socket.data.context.get(JWT_PAYLOAD).sub
-
-    socket.publish('room', JSON.stringify({ event: 'said', data: { user, text: data } }))
+  @SubscribeMessage('say', [data(Say), value(JWT_PAYLOAD), socket()])
+  say(message: z.infer<typeof Say>, user: JwtPayload, client: GatewaySocket) {
+    client.publish('room', JSON.stringify({ event: 'said', data: { user: user.sub, text: message.text } }))
     return { event: 'sent' } // sent back to this socket
   }
 }
 ```
 
-`socket` is Bun's `ServerWebSocket`, with its pub/sub. Frames that are not such JSON are dropped; when the application closes, sockets are closed with code 1001.
+`socket` is Bun's `ServerWebSocket`, with its pub/sub. Invalid data, a refused message or a failed handler is answered with an `exception` event, as Nest's `BaseWsExceptionFilter` does; frames that are not such JSON are dropped; when the application closes, sockets are closed with code 1001.
 
 ## JWT
 
@@ -204,6 +206,25 @@ class AuthModule {}
 ```
 
 `JwtModule.registerAsync({ inject, useFactory })` takes the options from other providers; `new JwtService(options)` works without the module.
+
+## Rate limiting
+
+`@getsoda/core/throttler` limits the requests of each client on each route, as `@nestjs/throttler` does, answering `429` with `Retry-After` past the limit:
+
+```ts
+import { SkipThrottle, Throttle, ThrottlerGuard, ThrottlerModule } from '@getsoda/core/throttler'
+
+@Module({ imports: [ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 100 }] })] })
+class AppModule {}
+
+await createApp(AppModule, { guards: [ThrottlerGuard] })
+
+@Post('login')
+@Throttle({ default: { limit: 5, ttl: 60_000 } })
+login() {}
+```
+
+Counts live in memory by default; a `ThrottlerStorage` shares them between instances.
 
 ## OpenAPI
 

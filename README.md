@@ -6,6 +6,8 @@ A class-based web framework for [Bun](https://bun.sh): modules, dependency injec
 bun create soda my-app
 ```
 
+**[Documentation](./docs)**: getting started, a guide per topic, recipes, and a map from Nest.
+
 | Package | |
 |---|---|
 | [`@getsoda/core`](./packages/core) | the framework |
