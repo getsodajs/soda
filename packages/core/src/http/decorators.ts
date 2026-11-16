@@ -29,7 +29,7 @@
  */
 
 import type { Constructor } from '../di/index.ts'
-import type { Argument, ArgumentFor, ArgumentValues } from './arguments.ts'
+import type { Argument, ArgumentValues } from './arguments.ts'
 import type { Context } from './context.ts'
 import { ControllerError } from './errors.ts'
 
@@ -81,7 +81,9 @@ export type RouteHandlerHint<P extends string> =
 
 /**
  * Decorator of a route with an argument list: `@Get(':id', [param('id', int)])`.
- * The method must accept the values of the arguments, in order.
+ * The method must accept the values of the arguments, in order. A `param()` may
+ * name a parameter of the controller path: the application checks at startup
+ * that every name exists in the full path.
  */
 export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[], P extends string = string> = <
   This,
@@ -103,8 +105,8 @@ export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[], P ex
  */
 export interface RouteDecoratorFactory {
   <const P extends string = '/'>(path?: P): RouteDecorator<P>
-  <const P extends string, const A extends readonly ArgumentFor<P>[]>(path: P, args: A): ArgumentsRouteDecorator<A, P>
-  <const A extends readonly ArgumentFor<'/'>[]>(args: A): ArgumentsRouteDecorator<A, '/'>
+  <const P extends string, const A extends readonly Argument<unknown>[]>(path: P, args: A): ArgumentsRouteDecorator<A, P>
+  <const A extends readonly Argument<unknown>[]>(args: A): ArgumentsRouteDecorator<A, '/'>
 }
 
 /**
@@ -189,12 +191,12 @@ const routeFactory = (method: string, decorator: string, sse = false): RouteDeco
  */
 export interface MethodRouteDecoratorFactory {
   <const P extends string = '/'>(method: string, path?: P): RouteDecorator<P>
-  <const P extends string, const A extends readonly ArgumentFor<P>[]>(
+  <const P extends string, const A extends readonly Argument<unknown>[]>(
     method: string,
     path: P,
     args: A
   ): ArgumentsRouteDecorator<A, P>
-  <const A extends readonly ArgumentFor<'/'>[]>(method: string, args: A): ArgumentsRouteDecorator<A, '/'>
+  <const A extends readonly Argument<unknown>[]>(method: string, args: A): ArgumentsRouteDecorator<A, '/'>
 }
 
 /**

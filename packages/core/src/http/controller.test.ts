@@ -304,11 +304,28 @@ describe('arguments', () => {
     expect(constructorField.status).toBe(201)
   })
 
+  it('gives param() the parameters of the controller path', async () => {
+    @Controller('/teams/:team')
+    class MembersController {
+      @Get('members/:id', [param('team'), param('id', int)])
+      find(team: string, id: number) {
+        return { team, id }
+      }
+    }
+
+    @Module({ controllers: [MembersController] })
+    class MembersModule {}
+
+    const request = await serve(MembersModule)
+
+    expect(await (await request('GET', '/teams/red%20sox/members/7')).json()).toEqual({ team: 'red sox', id: 7 })
+  })
+
   it('refuses at startup a param() that is not in the route path', async () => {
     @Controller('/x')
     class Broken {
-      @Get([param('id' as never)])
-      read(): void {}
+      @Get([param('id')])
+      read(_id: string): void {}
     }
 
     @Module({ controllers: [Broken] })
@@ -317,7 +334,7 @@ describe('arguments', () => {
     const container = await createContainer(BrokenModule)
 
     expect(() => controllerRoutes(container)).toThrow(
-      new ControllerError('UNKNOWN_PARAM', `Broken.read: param('id') is not a parameter of "/x"`)
+      new ControllerError('UNKNOWN_PARAM', `Broken.read: param('id') is not a parameter of "/x" (it has none)`)
     )
   })
 })
@@ -526,10 +543,6 @@ describe('declaration errors', () => {
       contextMismatch(ctx: Context<':slug'>): void {
         void ctx
       }
-
-      // @ts-expect-error `idd` is not a parameter of the path
-      @Get(':id', [param('idd')])
-      unknownParam(): void {}
 
       // @ts-expect-error int gives a number, not a string
       @Get(':id', [param('id', int)])

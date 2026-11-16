@@ -126,7 +126,11 @@ export class Context<P extends string = string> {
     return this.#search
   }
 
-  /** Path parameter, decoded; converted and checked when a parser is given. */
+  /**
+   * Path parameter, decoded; converted and checked when a parser is given.
+   * `P` is the route path only: read a parameter of the controller path from a
+   * plain `Context`, or receive it with `param()` in the argument list.
+   */
   param<N extends ParamNameOf<P>>(name: N): ContextParams<P>[N]
   param<N extends ParamNameOf<P>, V extends ValueParser<unknown>>(name: N, parser: V): Parsed<V>
   param(name: string, parser?: ValueParser<unknown>): unknown {

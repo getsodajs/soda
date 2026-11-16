@@ -80,7 +80,9 @@ const assertParamsExist = (args: readonly Argument<unknown>[], path: string, nam
 
   for (const arg of args) {
     if (arg.kind === 'param' && !names.has(arg.name)) {
-      throw new ControllerError('UNKNOWN_PARAM', `${name}: param('${arg.name}') is not a parameter of "${path}"`)
+      const known = names.size === 0 ? 'it has none' : `its parameters: ${[...names].join(', ')}`
+
+      throw new ControllerError('UNKNOWN_PARAM', `${name}: param('${arg.name}') is not a parameter of "${path}" (${known})`)
     }
   }
 }

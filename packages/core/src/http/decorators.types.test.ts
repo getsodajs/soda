@@ -4,8 +4,19 @@ import type { Context } from './context.ts'
 import { Controller, Get } from './decorators.ts'
 
 // Checked by the type checker: each @ts-expect-error must stay an error.
-@Controller('sub')
+@Controller('teams/:team')
 class Handlers {
+  // A parameter of the controller path is a string, in a list and in the context.
+  @Get(':token', [param('team'), param('token')])
+  controllerParam(team: string, token: string) {
+    return [team, token]
+  }
+
+  @Get(':token')
+  controllerParamInContext(ctx: Context) {
+    return [ctx.param('team'), ctx.param('token')]
+  }
+
   @Get(':token')
   context(ctx: Context<':token'>) {
     return ctx.param('token')

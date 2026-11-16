@@ -4,7 +4,7 @@
  */
 
 export { body, context, cookie, form, header, param, query, value } from './arguments.ts'
-export type { Argument, ArgumentFor, ArgumentKind, ArgumentValues, RawParam } from './arguments.ts'
+export type { Argument, ArgumentKind, ArgumentValues, ParamValue, RawParam } from './arguments.ts'
 export { Context } from './context.ts'
 export { CookieSigner, signed } from './cookies.ts'
 export { ContextKey } from './context-key.ts'

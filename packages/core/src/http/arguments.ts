@@ -39,31 +39,33 @@ export interface Argument<T, K extends ArgumentKind = ArgumentKind, N extends st
   readonly multipart?: true
 }
 
-/** Arguments accepted by a route with path `P`: `param()` names must exist in it. */
-export type ArgumentFor<P extends string> =
-  | Argument<unknown, 'param', ParamNameOf<P>>
-  | Argument<unknown, Exclude<ArgumentKind, 'param'>>
-
 declare const RAW_PARAM: unique symbol
 
 /**
  * Value of `param(name)` without parser, typed by the route path:
- * `string` for `:id`, `string | undefined` for `:id?`.
+ * `string` for `:id`, `string | undefined` for `:id?`, `string` for a
+ * parameter of the controller path.
  */
 export interface RawParam {
   readonly [RAW_PARAM]: true
 }
 
+/** A parameter of the route path as typed there; one of the controller path is a `string`. */
+export type ParamValue<P extends string, N extends string> = N extends ParamNameOf<P> ? ContextParams<P>[N] : string
+
 /** Values a method receives for an argument list on a route with path `P`. */
 export type ArgumentValues<A extends readonly Argument<unknown>[], P extends string = string> = {
   -readonly [K in keyof A]: A[K] extends Argument<infer T, ArgumentKind, infer N>
     ? [T] extends [RawParam]
-      ? ContextParams<P>[N]
+      ? ParamValue<P, N>
       : T
     : never
 }
 
-/** Path parameter, typed by the route path, or by `parser`. Like `@Param('id', ParseIntPipe)`. */
+/**
+ * Path parameter of the route or of its controller, typed by the route path,
+ * or by `parser`. Like `@Param('id', ParseIntPipe)`.
+ */
 export function param<const N extends string>(name: N): Argument<RawParam, 'param', N>
 export function param<const N extends string, V extends ValueParser<unknown>>(
   name: N,
