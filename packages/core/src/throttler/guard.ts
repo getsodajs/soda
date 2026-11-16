@@ -8,6 +8,7 @@ import type { Context } from '../http/context.ts'
 import { createDecorator } from '../http/enhancers.ts'
 import type { CanActivate, ClassOrMethodDecorator } from '../http/enhancers.ts'
 import { TooManyRequestsException } from '../http/exceptions.ts'
+import { ApiResponses } from '../openapi/decorators.ts'
 import { THROTTLER_OPTIONS, THROTTLER_STORAGE } from './module.ts'
 import type { ThrottlerLimit } from './module.ts'
 
@@ -46,8 +47,9 @@ const headerName = (base: string, name: string): string => (name === DEFAULT ? b
  * `createApp(AppModule, { guards: [ThrottlerGuard] })`, or with `@UseGuards()`.
  *
  * A route is counted per controller and method, as in Nest: `login` and
- * `register` each have their own limit.
+ * `register` each have their own limit. In the OpenAPI document, the routes it guards may answer `429`.
  */
+@ApiResponses({ 429: { description: 'Too many requests' } })
 export class ThrottlerGuard implements CanActivate {
   readonly #options = inject(THROTTLER_OPTIONS)
   readonly #storage = inject(THROTTLER_STORAGE)

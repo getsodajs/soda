@@ -1,6 +1,8 @@
 # OpenAPI
 
-`@getsoda/core/openapi` describes your routes from what already validates them: argument parsers, and schemas implementing [Standard JSON Schema](https://standardschema.dev) (zod 4 does). Nothing is written twice: no `@ApiProperty()` on each field of a DTO, as `@nestjs/swagger` needs.
+`@getsoda/core/openapi` builds the document from your code: everything the routes already declare is described, with no decorator. Decorators add what code cannot say (a summary, the schema of what a handler returns), or replace what the document found.
+
+Nothing is written twice: no `@ApiProperty()` on each field of a DTO, as `@nestjs/swagger` needs. The schema that validates a request is the one documented.
 
 ```ts
 import { OpenApiModule } from '@getsoda/core/openapi'
@@ -17,11 +19,29 @@ import { OpenApiModule } from '@getsoda/core/openapi'
 export class AppModule {}
 ```
 
-The document is served at `/openapi.json` (the `path` option changes it), Swagger UI at `ui` when given; both follow the global prefix.
+That is the whole setup: there is nothing to turn on. The document is served at `/openapi.json` (the `path` option changes it), Swagger UI at `ui` when given; both follow the global prefix.
 
-## From your schemas
+## What is generated
 
-The schema a route validates with is the one documented. Written once, it checks the request, types the handler and describes the route:
+| Part of the document | From |
+|---|---|
+| paths, `:id` written `{id}` | the route; an optional parameter gives two paths |
+| path, query, header and cookie parameters | their parser or schema; required unless `.optional()` or the schema accepts `undefined` |
+| request body | `body(schema)` as JSON, `form()` as multipart and urlencoded |
+| success response | `201` for `POST`, `200` otherwise, `@HttpCode()`; `text/event-stream` for `@Sse()` |
+| `400 Invalid request` | an argument that can be refused: a body, a value with a parser or schema |
+| `413`, `415` | `body()` (`415`), `form()` (`413` and `415`) |
+| guard responses and bearer token | the decorators of each guard, see [Guards](#guards); `403 Forbidden` for a guard without |
+| tags | the controller path: `@Controller('v1/orders/:shop')` is tagged `v1/orders` |
+| `operationId` | controller and method: `UsersController_findOne` |
+
+Error responses are described with the body Soda answers with, `HttpError` in the components: `statusCode`, `message` (a string, or the list of validation issues), `error`.
+
+What code does not say is not generated: a summary, a description, what a handler returns, the errors it throws itself (a `404`, a `409`). Those are what decorators are for.
+
+`@All()` routes and WebSocket gateways are left out: OpenAPI has no way to say "any method", nor WebSockets.
+
+### From your schemas
 
 ```ts
 const CreateUser = z.object({
@@ -42,19 +62,24 @@ export class UsersController {
 }
 ```
 
-gives, with no decorator:
+gives, with no decorator (`HttpError` stands for `{ "$ref": "#/components/schemas/HttpError" }`):
 
 ```json
 "/users/{id}": { "get": {
   "operationId": "UsersController_findOne",
+  "tags": ["users"],
   "parameters": [
     { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
     { "name": "full", "in": "query", "required": false, "schema": { "type": "string" } }
   ],
-  "responses": { "200": { "description": "Success" } }
+  "responses": {
+    "200": { "description": "Success" },
+    "400": { "description": "Invalid request", "content": { "application/json": { "schema": HttpError } } }
+  }
 } },
 "/users": { "post": {
   "operationId": "UsersController_create",
+  "tags": ["users"],
   "requestBody": { "required": true, "content": { "application/json": { "schema": {
     "type": "object",
     "properties": {
@@ -64,42 +89,43 @@ gives, with no decorator:
     },
     "required": ["name", "email"]
   } } } },
-  "responses": { "201": { "description": "Success" } }
+  "responses": {
+    "201": { "description": "Success" },
+    "400": { "description": "Invalid request", "content": { "application/json": { "schema": HttpError } } },
+    "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": HttpError } } }
+  }
 } }
 ```
 
-A query value is described as what the client sends, a string, before `z.stringbool()` turns it into a boolean. Change the schema and the document follows: a field made optional leaves `required`, a `.max(100)` becomes `maxLength`. What the handler returns is not known at runtime: describe responses with `@ApiResponses()`, below.
-
-## What is described
-
-From each route, without decorators:
-
-- the path, `:id` written `{id}`; an optional parameter gives two paths;
-- path, query, header and cookie parameters, typed by their parser or schema, required unless `.optional()` or the schema accepts `undefined`;
-- the JSON body of `body(schema)`, the form of `form()`;
-- the success status: `201` for `POST`, `@HttpCode()` otherwise;
-- `text/event-stream` for `@Sse()` routes.
-
-`@All()` routes and WebSocket gateways are left out: OpenAPI has no way to say "any method", nor WebSockets.
+A query value is described as what the client sends, a string, before `z.stringbool()` turns it into a boolean. Change the schema and the document follows: a field made optional leaves `required`, a `.max(100)` becomes `maxLength`.
 
 ## Decorators
 
+| Decorator | Does | Over what is generated |
+|---|---|---|
+| `@ApiOperation({ summary, description, deprecated })` | what the operation does | adds: nothing is generated |
+| `@ApiResponses({ [status]: { description, schema? } })` | responses, typed by a schema | adds statuses; replaces those it declares |
+| `@ApiTags(...names)` | groups in Swagger UI | on a controller, replaces the tag of its path; on a method, adds |
+| `@ApiBearerAuth(required = true)` | needs `Authorization: Bearer` | replaces what the guards say; `false` removes it |
+| `@ApiExclude()` | left out of the document | |
+
 ```ts
-import { ApiBearerAuth, ApiExclude, ApiOperation, ApiResponses, ApiTags } from '@getsoda/core/openapi'
+import { ApiExclude, ApiOperation, ApiResponses, ApiTags } from '@getsoda/core/openapi'
 
 const User = z.object({ id: z.number().int(), name: z.string() })
 
 @Controller('users')
-@ApiTags('users')
-@ApiBearerAuth()
+@UseGuards(JwtGuard)          // bearer token and 401, from JwtGuard
+@ApiTags('people')            // instead of `users`
 export class UsersController {
   @Get(':id', [param('id', int)])
   @ApiOperation({ summary: 'One user', description: 'By its id.' })
   @ApiResponses({
-    200: { description: 'The user', schema: User },
-    404: { description: 'No such user' },
+    200: { description: 'The user', schema: User },   // replaces 200 Success
+    404: { description: 'No such user' },             // adds; an error status gets HttpError
   })
   findOne(id: number) {}
+  // responses: 200 The user, 400 Invalid request, 401 Missing or invalid token, 404 No such user
 
   @Get('internal')
   @ApiExclude()
@@ -107,30 +133,33 @@ export class UsersController {
 }
 ```
 
-| Decorator | |
-|---|---|
-| `@ApiTags(...names)` | groups in Swagger UI |
-| `@ApiOperation({ summary, description, deprecated })` | what the operation does |
-| `@ApiResponses({ [status]: { description, schema? } })` | responses, typed by a schema |
-| `@ApiBearerAuth()` | needs `Authorization: Bearer` |
-| `@ApiExclude()` | left out of the document |
+### Adding and replacing
 
-On a class, they apply to every route; on a method, they add to the class:
+Each part of an operation is built in layers, the most specific last, a later one replacing an earlier one where they overlap:
 
-- `@ApiTags`: the tags of both;
-- `@ApiOperation`: the fields of the class, those the method gives replacing them;
-- `@ApiResponses`: the success of the route, `201 Success` here, always stays; declared statuses add to it, and a declared `201` replaces it. Those of a method replace those of the class status by status, so a `401` on the controller documents every route.
+1. what is generated;
+2. the decorators of the route's guards (global ones, the controller's, the method's);
+3. the decorators of the controller;
+4. the decorators of the method.
+
+- **Responses** replace status by status: a `401` on the controller documents every route, a `401` on a method replaces it there, a declared `201` replaces `201 Success`. Everything else stays. An error status declared without `schema` gets `HttpError`; give a `schema` when the body is yours.
+- **Operation**: field by field. `deprecated: true` on the controller stays when a method gives only a `summary`.
+- **Tags**: `@ApiTags` on a controller replaces the tag of its path, `@ApiTags()` with no name removes it; tags of a method add to the controller's.
+- **Bearer token**: the last that says replaces the others: `@ApiBearerAuth(false)` on a method behind `JwtGuard` documents it as public.
+
+### Guards
+
+A guard describes what it needs with the same decorators, on its class: every route it guards then gets them.
 
 ```ts
-@Controller('orders')
-@ApiResponses({ 401: { description: 'No token' } })
-export class OrdersController {
-  @Post([body(PlaceOrder)])
-  @ApiResponses({ 409: { description: 'Already placed' } })
-  place(input: PlaceOrder) {}
-  // responses: 201 Success, 401 No token, 409 Already placed
+@ApiBearerAuth()
+@ApiResponses({ 401: { description: 'Missing or invalid API key' } })
+export class ApiKeyGuard implements CanActivate {
+  canActivate(ctx: Context) { /* ... */ }
 }
 ```
+
+Soda's guards are described already: `JwtGuard` with the bearer token and `401`, `ThrottlerGuard` with `429`. A guard declaring no response gives `403 Forbidden`, what it answers when it returns `false`.
 
 ## The document itself
 

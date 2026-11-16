@@ -9,6 +9,7 @@ import type { Context } from '../http/context.ts'
 import { ContextKey } from '../http/context-key.ts'
 import type { CanActivate } from '../http/enhancers.ts'
 import { UnauthorizedException } from '../http/exceptions.ts'
+import { ApiBearerAuth, ApiResponses } from '../openapi/decorators.ts'
 import { JwtError } from './errors.ts'
 import { JWT_OPTIONS } from './module.ts'
 import { JwtService } from './service.ts'
@@ -36,7 +37,10 @@ const unauthorized = (message: string, challenge: string, cause?: unknown): Unau
  * ```
  *
  * Needs `JwtModule` imported in the controller's module, or registered as global.
+ * In the OpenAPI document, the routes it guards need a bearer token and may answer `401`.
  */
+@ApiBearerAuth()
+@ApiResponses({ 401: { description: 'Missing or invalid token' } })
 export class JwtGuard implements CanActivate {
   readonly #jwt = inject(JwtService)
   readonly #cookie = inject(JWT_OPTIONS).cookie

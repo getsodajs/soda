@@ -28,13 +28,18 @@ const exclude = createDecorator<boolean>('ApiExclude')
 /** Summary, description and deprecation of an operation; on a method, its fields win over those of the controller. */
 export const ApiOperation = (options: ApiOperationOptions): ClassOrMethodDecorator => operation(options)
 
-/** Tags grouping operations; those of a method add to those of its controller. */
+/**
+ * Tags grouping operations. A controller is tagged with its path (`users`)
+ * unless it declares its own; those of a method add to those of its controller.
+ */
 export const ApiTags = (...names: string[]): ClassOrMethodDecorator => tags(names)
 
 /**
- * Responses of an operation, by status. They add to the success of the route
- * (`200`, `201` for `POST`, or `@HttpCode()`), replacing it when they declare
- * its status; those of a method add to those of the controller, the same way.
+ * Responses of an operation, by status. They add to those the document finds
+ * itself (the success of the route, its validation errors, those of its
+ * guards), replacing them when they declare the same status: those of a guard,
+ * then of the controller, then of the method. An error status without schema
+ * gets the body of `HttpException`.
  *
  * ```ts
  * @ApiResponses({ 200: { description: 'The user', schema: User }, 404: { description: 'No such user' } })
@@ -42,8 +47,11 @@ export const ApiTags = (...names: string[]): ClassOrMethodDecorator => tags(name
  */
 export const ApiResponses = (byStatus: Readonly<Record<number, ApiResponseOptions>>): ClassOrMethodDecorator => responses(byStatus)
 
-/** Operations need `Authorization: Bearer <token>`, as `JwtGuard` reads. */
-export const ApiBearerAuth = (): ClassOrMethodDecorator => bearer(true)
+/**
+ * Operations need `Authorization: Bearer <token>`. On a guard, every route it
+ * guards does, as with `JwtGuard`; `@ApiBearerAuth(false)` says a route does not.
+ */
+export const ApiBearerAuth = (required = true): ClassOrMethodDecorator => bearer(required)
 
 /** Leaves a controller or a method out of the document. */
 export const ApiExclude = (): ClassOrMethodDecorator => exclude(true)

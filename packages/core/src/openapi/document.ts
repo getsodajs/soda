@@ -9,8 +9,11 @@
  * such method.
  */
 
+import type { Constructor } from '../di/index.ts'
 import type { Argument } from '../http/arguments.ts'
+import { getControllerPath } from '../http/decorators.ts'
 import { getClassEnhancers } from '../http/enhancers.ts'
+import type { Guard } from '../http/enhancers.ts'
 import type { Parser } from '../http/parsers.ts'
 import type { MappedController, MappedRoute } from '../http/routes.ts'
 import { isStandardSchema } from '../http/schema.ts'
@@ -51,7 +54,10 @@ export interface OpenApiDocument {
   readonly info: OpenApiOptions['info']
   readonly servers?: OpenApiOptions['servers']
   readonly paths: Readonly<Record<string, Readonly<Record<string, OpenApiOperation>>>>
-  readonly components?: { readonly securitySchemes: Readonly<Record<string, JsonSchema>> }
+  readonly components?: {
+    readonly schemas?: Readonly<Record<string, JsonSchema>>
+    readonly securitySchemes?: Readonly<Record<string, JsonSchema>>
+  }
 }
 
 const METHODS = new Set(['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH', 'TRACE'])
@@ -143,35 +149,120 @@ const requestBody = (args: readonly Argument<unknown>[]): OpenApiOperation['requ
   return { required: !isOptional(body.source), content: Object.fromEntries(types.map((type) => [type, { schema }])) }
 }
 
-/**
- * A decorator's value on the controller and on the method, apart: the route's
- * metadata only keeps the method's. The same value means the method declared none.
- */
-const layersOf = <T>(info: MappedRoute['info'], key: symbol): readonly [T | undefined, T | undefined] => {
-  const inherited = getClassEnhancers(info.controller).metadata.get(key) as T | undefined
-  const value = info.metadata.get(key) as T | undefined
-
-  return [inherited, value === inherited ? undefined : value]
+/** Body of the errors Soda answers with: `HttpException`'s. */
+const ERROR: JsonSchema = {
+  type: 'object',
+  properties: {
+    statusCode: { type: 'integer' },
+    message: { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
+    error: { type: 'string' },
+  },
+  required: ['statusCode', 'message'],
 }
 
-const describeResponse = (response: ApiResponseOptions): OpenApiOperation['responses'][string] =>
-  response.schema === undefined
-    ? { description: response.description }
-    : { description: response.description, content: { 'application/json': { schema: toJsonSchema(response.schema) } } }
+/** Where the operations find {@link ERROR}, written once in the components. */
+const ERROR_REF: JsonSchema = { $ref: '#/components/schemas/HttpError' }
 
-/** The success of the route, then the declared responses: of the controller, then of the method, by status. */
-const responsesOf = (route: MappedRoute): OpenApiOperation['responses'] => {
-  const responses: Record<string, OpenApiOperation['responses'][string]> = route.sse
+type Responses = Record<string, OpenApiOperation['responses'][string]>
+
+const BAD_REQUEST = 'Invalid request'
+const TOO_LARGE = 'Request body too large'
+const UNSUPPORTED = 'Unsupported content type'
+const FORBIDDEN = 'Forbidden'
+
+/** The class whose decorators describe a guard: itself, or the class of an instance. */
+const classOf = (guard: Guard): Constructor<unknown> =>
+  (typeof guard === 'function' ? guard : guard.constructor) as Constructor<unknown>
+
+/**
+ * A decorator's values for a route, the least specific first: those of its
+ * guards, of its controller, of its method. The route's metadata only keeps the
+ * method's value when it has one: the same value means it declared none.
+ */
+const layersOf = <T>(route: MappedRoute, key: symbol, guards = true): T[] => {
+  const values: unknown[] = guards ? route.guardTypes.map((guard) => getClassEnhancers(classOf(guard)).metadata.get(key)) : []
+  const inherited = getClassEnhancers(route.info.controller).metadata.get(key)
+  const value = route.info.metadata.get(key)
+
+  values.push(inherited, value === inherited ? undefined : value)
+
+  return values.filter((entry) => entry !== undefined) as T[]
+}
+
+const describeResponse = (status: string, response: ApiResponseOptions): Responses[string] => {
+  if (response.schema !== undefined) {
+    return { description: response.description, content: { 'application/json': { schema: toJsonSchema(response.schema) } } }
+  }
+
+  return Number(status) >= 400 ? { description: response.description, content: { 'application/json': { schema: ERROR_REF } } } : { description: response.description }
+}
+
+/** The errors the arguments of a route answer with: `400` when a value can be refused, `413` and `415` for bodies. */
+const inputErrors = (args: readonly Argument<unknown>[]): Record<number, string> => {
+  const errors: Record<number, string> = {}
+
+  for (const arg of args) {
+    if (arg.kind === 'body' && arg.multipart === true) {
+      Object.assign(errors, arg.source === undefined ? {} : { 400: BAD_REQUEST }, { 413: TOO_LARGE, 415: UNSUPPORTED })
+    } else if (arg.kind === 'body') {
+      // Invalid JSON is refused, with or without schema.
+      Object.assign(errors, { 400: BAD_REQUEST, 415: UNSUPPORTED })
+    } else if (arg.source !== undefined && (arg.kind === 'param' || arg.kind === 'query' || arg.kind === 'header' || arg.kind === 'cookie')) {
+      errors[400] = BAD_REQUEST
+    }
+  }
+
+  return errors
+}
+
+/**
+ * What the document finds itself, then what is declared, each replacing the
+ * same status: the success of the route, the errors of its arguments, a `403`
+ * for a guard declaring no response of its own; then the responses of its
+ * guards, of its controller, of its method.
+ */
+const responsesOf = (route: MappedRoute): Responses => {
+  const responses: Responses = route.sse
     ? { 200: { description: 'Event stream', content: { 'text/event-stream': { schema: STRING } } } }
     : { [route.status]: { description: 'Success' } }
+  const found: Record<number, string> = inputErrors(route.args ?? [])
 
-  for (const declared of layersOf<Readonly<Record<number, ApiResponseOptions>>>(route.info, KEYS.responses)) {
-    for (const [status, response] of Object.entries(declared ?? {})) {
-      responses[status] = describeResponse(response)
+  for (const guard of route.guardTypes) {
+    if (getClassEnhancers(classOf(guard)).metadata.get(KEYS.responses) === undefined) {
+      found[403] = FORBIDDEN
+    }
+  }
+
+  for (const [status, description] of Object.entries(found)) {
+    responses[status] = describeResponse(status, { description })
+  }
+
+  for (const declared of layersOf<Readonly<Record<number, ApiResponseOptions>>>(route, KEYS.responses)) {
+    for (const [status, response] of Object.entries(declared)) {
+      responses[status] = describeResponse(status, response)
     }
   }
 
   return responses
+}
+
+/** The tag of a controller without `@ApiTags`: its path without parameters, `users` for `/users/:id`. */
+const tagOf = (controller: Constructor<unknown>): readonly string[] => {
+  const tag = (getControllerPath(controller) ?? '')
+    .split('/')
+    .filter((segment) => segment !== '' && !segment.startsWith(':') && !segment.startsWith('*'))
+    .join('/')
+
+  return tag === '' ? [] : [tag]
+}
+
+/** The controller's tags, declared or its path, and those of the method. */
+const tagsOf = (route: MappedRoute): readonly string[] => {
+  const inherited = getClassEnhancers(route.info.controller).metadata.get(KEYS.tags) as readonly string[] | undefined
+  const value = route.info.metadata.get(KEYS.tags) as readonly string[] | undefined
+  const own = value === inherited ? [] : (value ?? [])
+
+  return [...new Set([...(inherited ?? tagOf(route.info.controller)), ...own])]
 }
 
 const operationOf = (route: MappedRoute, segments: readonly Segment[], suffix: string): OpenApiOperation => {
@@ -185,51 +276,57 @@ const operationOf = (route: MappedRoute, segments: readonly Segment[], suffix: s
     }
   }
 
-  // A method's operation and tags add to those of its controller.
-  const [inheritedOperation, ownOperation] = layersOf<ApiOperationOptions>(info, KEYS.operation)
-  const options = { ...inheritedOperation, ...ownOperation }
-  const [inheritedTags, ownTags] = layersOf<readonly string[]>(info, KEYS.tags)
-  const tags = inheritedTags === undefined && ownTags === undefined ? undefined : [...new Set([...(inheritedTags ?? []), ...(ownTags ?? [])])]
+  // Fields of the method win over those of the controller.
+  const options: ApiOperationOptions = Object.assign({}, ...layersOf<ApiOperationOptions>(route, KEYS.operation, false))
+  const tags = tagsOf(route)
   const body = requestBody(args)
+  const bearer = layersOf<boolean>(route, KEYS.bearer).at(-1) === true
 
   return {
     operationId: `${info.controller.name}_${info.handler}${suffix}`,
     ...options,
-    ...(tags === undefined ? {} : { tags }),
+    ...(tags.length === 0 ? {} : { tags }),
     ...(parameters.length === 0 ? {} : { parameters }),
     ...(body === undefined ? {} : { requestBody: body }),
     responses: responsesOf(route),
-    ...(info.metadata.get(KEYS.bearer) === true ? { security: [{ bearer: [] }] } : {}),
+    ...(bearer ? { security: [{ bearer: [] }] } : {}),
   }
 }
 
-/** Adds the operations of `route` to `paths`, one per form of its path; `false` when it is left out. */
-const addRoute = (paths: Record<string, Record<string, OpenApiOperation>>, route: MappedRoute): boolean => {
+/** Adds the operations of `route` to `paths`, one per form of its path, and returns them. */
+const addRoute = (paths: Record<string, Record<string, OpenApiOperation>>, route: MappedRoute): OpenApiOperation[] => {
   const { info } = route
 
   if (!METHODS.has(info.method) || info.metadata.get(KEYS.exclude) === true) {
-    return false
+    return []
   }
+
+  const operations: OpenApiOperation[] = []
 
   for (const [index, segments] of expandOptional(info.path, parsePath(info.path)).entries()) {
     const path = toOpenApiPath(segments)
+    const operation = operationOf(route, segments, index === 0 ? '' : `_${index}`)
 
     paths[path] ??= {}
-    paths[path][info.method.toLowerCase()] = operationOf(route, segments, index === 0 ? '' : `_${index}`)
+    paths[path][info.method.toLowerCase()] = operation
+    operations.push(operation)
   }
 
-  return true
+  return operations
 }
+
+const refersToError = (operation: OpenApiOperation): boolean =>
+  Object.values(operation.responses).some((response) => response.content?.['application/json']?.schema === ERROR_REF)
 
 /** The OpenAPI document of `controllers`, as `inject(ROUTES).controllers` lists them. */
 export const createOpenApiDocument = (controllers: readonly MappedController[], options: OpenApiOptions): OpenApiDocument => {
   const paths: Record<string, Record<string, OpenApiOperation>> = {}
-  let bearer = false
-
-  for (const controller of controllers) {
-    for (const route of controller.routes) {
-      bearer = (addRoute(paths, route) && route.info.metadata.get(KEYS.bearer) === true) || bearer
-    }
+  const operations = controllers.flatMap((controller) => controller.routes.flatMap((route) => addRoute(paths, route)))
+  const bearer = operations.some((operation) => operation.security !== undefined)
+  const errors = operations.some(refersToError)
+  const components = {
+    ...(errors ? { schemas: { HttpError: ERROR } } : {}),
+    ...(bearer ? { securitySchemes: { bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } } : {}),
   }
 
   return {
@@ -237,6 +334,6 @@ export const createOpenApiDocument = (controllers: readonly MappedController[], 
     info: options.info,
     ...(options.servers === undefined ? {} : { servers: options.servers }),
     paths,
-    ...(bearer ? { components: { securitySchemes: { bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } } } : {}),
+    ...(errors || bearer ? { components } : {}),
   }
 }

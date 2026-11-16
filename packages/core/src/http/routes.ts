@@ -296,7 +296,15 @@ class RoutesBuilder {
 
       const status = statusOf(metadata, route)
 
-      this.#mapped.push({ info, args: route.args, status, sse: route.sse, guards: guardNames, interceptors: interceptorNames })
+      this.#mapped.push({
+        info,
+        args: route.args,
+        status,
+        sse: route.sse,
+        guards: guardNames,
+        interceptors: interceptorNames,
+        guardTypes: [...(options.guards ?? []), ...controller.guards, ...own.guards],
+      })
       this.routes.push({
         method: route.method,
         path,
@@ -329,6 +337,8 @@ export interface MappedRoute {
   readonly guards: readonly string[]
   /** Names of the interceptors declared on the controller and the method. */
   readonly interceptors: readonly string[]
+  /** Guards of the route, global ones first: what they need is in their own decorators (OpenAPI). */
+  readonly guardTypes: readonly Guard[]
 }
 
 /** A controller and the routes made from it. */

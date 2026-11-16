@@ -4,10 +4,14 @@ import { Module } from '../di/index.ts'
 import type { Constructor, ModuleClass } from '../di/index.ts'
 import { body, cookie, form, header, param, query } from '../http/arguments.ts'
 import { All, Controller, Get, HttpCode, Post, Sse } from '../http/decorators.ts'
+import { getClassEnhancers, UseGuards } from '../http/enhancers.ts'
+import type { CanActivate } from '../http/enhancers.ts'
 import { int, uuid } from '../http/parsers.ts'
 import type { SseMessage } from '../http/sse.ts'
 import { createTestApp } from '../testing/index.ts'
-import { ApiBearerAuth, ApiExclude, ApiOperation, ApiResponses, ApiTags } from './decorators.ts'
+import { JwtGuard } from '../jwt/guard.ts'
+import { ThrottlerGuard } from '../throttler/guard.ts'
+import { ApiBearerAuth, ApiExclude, ApiOperation, ApiResponses, ApiTags, KEYS } from './decorators.ts'
 import type { OpenApiDocument } from './document.ts'
 import { OpenApiModule } from './module.ts'
 
@@ -67,6 +71,8 @@ class AppModule {}
 
 const app = await createTestApp(AppModule, { prefix: 'api' })
 
+const error = (description: string) => ({ description, content: { 'application/json': { schema: { $ref: '#/components/schemas/HttpError' } } } })
+
 const defineModule = (controllers: readonly Constructor<unknown>[]): ModuleClass => {
   @Module({ imports: [OpenApiModule.forRoot({ info: { title: 'Shop', version: '1.0.0' } })], controllers })
   class DecoratedModule {}
@@ -95,7 +101,7 @@ describe('OpenApiModule', () => {
               { name: 'page', in: 'query', required: false, schema: { type: 'integer' } },
               { name: 'sort', in: 'query', required: true, schema: { type: 'string', enum: ['asc', 'desc'] } },
             ],
-            responses: { 200: { description: 'Success' } },
+            responses: { 200: { description: 'Success' }, 400: error('Invalid request') },
           },
           post: {
             operationId: 'UsersController_create',
@@ -116,7 +122,7 @@ describe('OpenApiModule', () => {
                 },
               },
             },
-            responses: { 201: { description: 'Success' } },
+            responses: { 201: { description: 'Success' }, 400: error('Invalid request'), 415: error('Unsupported content type') },
             security: [{ bearer: [] }],
           },
         },
@@ -145,7 +151,8 @@ describe('OpenApiModule', () => {
                   },
                 },
               },
-              404: { description: 'No such user' },
+              400: error('Invalid request'),
+              404: error('No such user'),
             },
           },
         },
@@ -157,7 +164,7 @@ describe('OpenApiModule', () => {
               required: false,
               content: { 'multipart/form-data': { schema: {} }, 'application/x-www-form-urlencoded': { schema: {} } },
             },
-            responses: { 204: { description: 'Success' } },
+            responses: { 204: { description: 'Success' }, 413: error('Request body too large'), 415: error('Unsupported content type') },
           },
         },
         '/api/users/files': {
@@ -179,7 +186,10 @@ describe('OpenApiModule', () => {
           },
         },
       },
-      components: { securitySchemes: { bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
+      components: {
+        schemas: { HttpError: expect.objectContaining({ required: ['statusCode', 'message'] }) },
+        securitySchemes: { bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
+      },
     })
   })
 
@@ -194,11 +204,23 @@ describe('OpenApiModule', () => {
 })
 
 describe('decorators', () => {
-  @Controller('orders')
-  @ApiTags('orders')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'An order operation', deprecated: true })
   @ApiResponses({ 401: { description: 'No token' } })
+  class TokenGuard implements CanActivate {
+    canActivate(): boolean {
+      return true
+    }
+  }
+
+  class AdminGuard implements CanActivate {
+    canActivate(): boolean {
+      return true
+    }
+  }
+
+  @Controller('v1/orders/:shop')
+  @UseGuards(TokenGuard)
+  @ApiOperation({ summary: 'An order operation', deprecated: true })
   class OrdersController {
     @Get('mine')
     @ApiTags('me')
@@ -207,14 +229,25 @@ describe('decorators', () => {
       return null
     }
 
-    @Get()
-    list(): null {
+    @Post([body(CreateUser)])
+    @UseGuards(AdminGuard)
+    @ApiResponses({ 201: { description: 'The order', schema: User }, 401: { description: 'Expired token' }, 409: { description: 'Already placed' } })
+    place(): null {
       return null
     }
 
-    @Post([body(CreateUser)])
-    @ApiResponses({ 201: { description: 'The order', schema: User }, 401: { description: 'Expired token' }, 409: { description: 'Already placed' } })
-    place(): null {
+    @Get('open')
+    @ApiBearerAuth(false)
+    open(): null {
+      return null
+    }
+  }
+
+  @Controller('catalog')
+  @ApiTags('products')
+  class CatalogController {
+    @Get()
+    list(): null {
       return null
     }
   }
@@ -229,7 +262,7 @@ describe('decorators', () => {
   }
 
   const document = async (): Promise<OpenApiDocument> => {
-    const tested = await createTestApp(defineModule([OrdersController, AdminController]))
+    const tested = await createTestApp(defineModule([OrdersController, CatalogController, AdminController]))
     const json = (await (await tested.request('/openapi.json')).json()) as OpenApiDocument
 
     await tested.close()
@@ -237,22 +270,45 @@ describe('decorators', () => {
     return json
   }
 
-  it('adds those of a method to those of its controller, the method winning field by field', async () => {
+  it('tags a controller with its path, unless it declares its tags; those of a method add to them', async () => {
     const { paths } = await document()
 
-    expect(Object.keys(paths)).toEqual(['/orders/mine', '/orders'])
-    expect(paths['/orders/mine']!.get).toMatchObject({ summary: 'My orders', deprecated: true, tags: ['orders', 'me'], security: [{ bearer: [] }] })
-    expect(paths['/orders']!.get).toMatchObject({ summary: 'An order operation', deprecated: true, tags: ['orders'], security: [{ bearer: [] }] })
+    expect(Object.keys(paths)).toEqual(['/v1/orders/{shop}/mine', '/v1/orders/{shop}', '/v1/orders/{shop}/open', '/catalog'])
+    expect(paths['/v1/orders/{shop}/mine']!.get!.tags).toEqual(['v1/orders', 'me'])
+    expect(paths['/catalog']!.get!.tags).toEqual(['products'])
   })
 
-  it('keeps the success of the route, declared responses adding to it or replacing it by status', async () => {
+  it('merges the operation of a method with that of its controller, field by field', async () => {
     const { paths } = await document()
 
-    expect(paths['/orders']!.get!.responses).toEqual({ 200: { description: 'Success' }, 401: { description: 'No token' } })
-    expect(paths['/orders']!.post!.responses).toEqual({
+    expect(paths['/v1/orders/{shop}/mine']!.get).toMatchObject({ summary: 'My orders', deprecated: true })
+    expect(paths['/v1/orders/{shop}/open']!.get).toMatchObject({ summary: 'An order operation', deprecated: true })
+  })
+
+  it('describes what guards need from their decorators, a 403 for a guard without', async () => {
+    const { paths } = await document()
+
+    expect(paths['/v1/orders/{shop}/mine']!.get).toMatchObject({ security: [{ bearer: [] }] })
+    expect(Object.keys(paths['/v1/orders/{shop}/mine']!.get!.responses)).toEqual(['200', '401'])
+    expect(Object.keys(paths['/v1/orders/{shop}']!.post!.responses)).toEqual(['201', '400', '401', '403', '409', '415'])
+    expect(paths['/v1/orders/{shop}/open']!.get!.security).toBeUndefined()
+  })
+
+  it('keeps what it finds, declared responses replacing it by status: of guards, then the controller, then the method', async () => {
+    const { paths } = await document()
+
+    expect(paths['/v1/orders/{shop}']!.post!.responses).toMatchObject({
       201: { description: 'The order', content: { 'application/json': { schema: expect.objectContaining({ required: ['id', 'name'] }) } } },
-      401: { description: 'Expired token' },
-      409: { description: 'Already placed' },
+      400: error('Invalid request'),
+      401: error('Expired token'),
+      403: error('Forbidden'),
+      409: error('Already placed'),
     })
+  })
+
+  it('knows the guards of Soda', () => {
+    expect(getClassEnhancers(JwtGuard).metadata.get(KEYS.bearer)).toBe(true)
+    expect(getClassEnhancers(JwtGuard).metadata.get(KEYS.responses)).toMatchObject({ 401: {} })
+    expect(getClassEnhancers(ThrottlerGuard).metadata.get(KEYS.responses)).toMatchObject({ 429: {} })
   })
 })
