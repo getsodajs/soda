@@ -4,7 +4,7 @@
  * the method receives ready values instead of the context.
  *
  * ```ts
- * @Patch(':id', [param('id', int()), body(UpdateUserDto)])
+ * @Patch(':id', [param('id', int), body(UpdateUserDto)])
  * update(id: number, dto: UpdateUserDto) {}
  *
  * // Nest:

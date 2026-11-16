@@ -14,7 +14,7 @@ const oldSigner = new CookieSigner('old-secret')
 
 @Controller()
 class SessionController {
-  @Get('read', [cookie('theme'), cookie('visits', int({ optional: true }))])
+  @Get('read', [cookie('theme'), cookie('visits', int.optional())])
   read(theme: string | undefined, visits: number | undefined) {
     return { theme: theme ?? null, visits: visits ?? null }
   }
@@ -38,7 +38,7 @@ class SessionController {
     return { user }
   }
 
-  @Get('maybe', [cookie('session', signed(signer, { optional: true }))])
+  @Get('maybe', [cookie('session', signed(signer).optional())])
   maybe(user: string | undefined) {
     return { user: user ?? null }
   }

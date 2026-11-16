@@ -194,7 +194,7 @@ describe('interceptors', () => {
     @Controller('/i')
     @UseInterceptors(Envelope)
     class WrappedController {
-      @Get(':id', [param('id', int())])
+      @Get(':id', [param('id', int)])
       @UseInterceptors(async (_ctx, next) => {
         order.push('method before')
 
@@ -335,7 +335,7 @@ describe('exception filters', () => {
         return ''
       }
 
-      @Get('/n/:id', [param('id', int())])
+      @Get('/n/:id', [param('id', int)])
       number(id: number): number {
         return id
       }

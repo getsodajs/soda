@@ -44,7 +44,7 @@ export interface RouteInfo {
  * ```ts
  * @Patch(':id')
  * async update(ctx: Context<':id'>) {
- *   const id = ctx.param('id', int())
+ *   const id = ctx.param('id', int)
  *   const dto = await ctx.body(UpdateUserDto)
  *
  *   return this.#users.update(id, dto)

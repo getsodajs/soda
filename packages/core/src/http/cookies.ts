@@ -20,8 +20,8 @@
  */
 
 import { timingSafeEqual } from 'node:crypto'
-import { failure } from './parsers.ts'
-import type { Parser, ParserOptions } from './parsers.ts'
+import { defineParser } from './parsers.ts'
+import type { RequiredParser } from './parsers.ts'
 
 const hmac = (secret: string, value: string): string =>
   new Bun.CryptoHasher('sha256', secret).update(value).digest('base64url')
@@ -76,23 +76,10 @@ export class CookieSigner {
   }
 }
 
-type Result<O extends ParserOptions> = O extends { readonly optional: true } ? string | undefined : string
-
 /**
  * Parser of a signed cookie: its value, `400` when it is missing or its
- * signature is wrong. With `{ optional: true }`, both give `undefined`, as a
- * forged cookie is no better than none.
+ * signature is wrong. With `.optional()`, both give `undefined`, as a forged
+ * cookie is no better than none.
  */
-export const signed = <const O extends ParserOptions = {}>(signer: CookieSigner, options?: O): Parser<Result<O>> => ({
-  jsonSchema: { type: 'string' },
-  optional: options?.optional === true,
-  parse: (value, name) => {
-    const unsigned = value === undefined ? undefined : signer.unsign(value)
-
-    if (unsigned === undefined && options?.optional !== true) {
-      throw failure(name, 'signed cookie')
-    }
-
-    return unsigned as Result<O>
-  },
-})
+export const signed = (signer: CookieSigner): RequiredParser<string> =>
+  defineParser('signed cookie', { type: 'string' }, (value) => signer.unsign(value), true)

@@ -16,7 +16,7 @@ export class UsersController {
     return this.#users.list()
   }
 
-  @Get(':id', [param('id', int())])
+  @Get(':id', [param('id', int)])
   findOne(id: number): User {
     const user = this.#users.find(id)
 

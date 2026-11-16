@@ -80,7 +80,7 @@ export type RouteHandlerHint<P extends string> =
   `Without an argument list, the method receives the context: (ctx: Context<'${P}'>). To receive values, list them: @Get('${P}', [param('name')]).`
 
 /**
- * Decorator of a route with an argument list: `@Get(':id', [param('id', int())])`.
+ * Decorator of a route with an argument list: `@Get(':id', [param('id', int)])`.
  * The method must accept the values of the arguments, in order.
  */
 export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[], P extends string = string> = <
@@ -97,7 +97,7 @@ export type ArgumentsRouteDecorator<A extends readonly Argument<unknown>[], P ex
  * ```ts
  * @Get()                                         // list(ctx?: Context)
  * @Get(':id')                                    // findOne(ctx: Context<':id'>)
- * @Get(':id', [param('id', int())])              // findOne(id: number)
+ * @Get(':id', [param('id', int)])              // findOne(id: number)
  * @Post([body(CreateUserDto)])                   // create(dto: CreateUserDto)
  * ```
  */

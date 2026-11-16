@@ -2,8 +2,8 @@
  * @module
  * Building an OpenAPI 3.1 document from the routes of an application.
  *
- * Schemas come from what validates requests: argument parsers (`int()`,
- * `uuid()`...) and Standard Schemas implementing Standard JSON Schema, as zod
+ * Schemas come from what validates requests: argument parsers (`int`,
+ * `uuid`...) and Standard Schemas implementing Standard JSON Schema, as zod
  * does. Paths with optional parameters give one path per form, as OpenAPI has
  * no optional path parameters; `@All()` routes are left out, OpenAPI has no
  * such method.
@@ -91,7 +91,7 @@ const isOptional = (source: Argument<unknown>['source']): boolean => {
   }
 
   if (!isStandardSchema(source)) {
-    return (source as Parser<unknown>).optional === true
+    return (source as Parser<unknown>).required === false
   }
 
   const result = (source as StandardSchemaV1)['~standard'].validate(undefined)

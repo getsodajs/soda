@@ -39,7 +39,7 @@ export {
 } from './exceptions.ts'
 export type { HttpExceptionBody, HttpExceptionOptions } from './exceptions.ts'
 export { boolean, int, number, uuid } from './parsers.ts'
-export type { Parsed, Parser, ParserOptions, ValueParser } from './parsers.ts'
+export type { Parsed, Parser, RequiredParser, ValueParser } from './parsers.ts'
 export { buildRoutes, controllerRoutes, ROUTES } from './routes.ts'
 export type { BuiltRoutes, ControllerRoutesOptions, MappedController, MappedRoute, RouteRegistry } from './routes.ts'
 export type { InferOutput, StandardSchemaV1 } from './schema.ts'

@@ -210,12 +210,12 @@ describe('routes', () => {
 describe('arguments', () => {
   @Controller('/users')
   class UsersController {
-    @Get(':id', [param('id', int())])
+    @Get(':id', [param('id', int)])
     findOne(id: number): object {
       return { id }
     }
 
-    @Get([query('page', int({ optional: true })), header('accept-language')])
+    @Get([query('page', int.optional()), header('accept-language')])
     list(page: number | undefined, language: string | undefined): object {
       return { page: page ?? 1, language: language ?? null }
     }
@@ -225,14 +225,14 @@ describe('arguments', () => {
       return user
     }
 
-    @Patch(':id', [param('id', int()), body(UserSchema), context()])
+    @Patch(':id', [param('id', int), body(UserSchema), context()])
     update(id: number, user: User, ctx: Context): object {
       return { id, user, method: ctx.req.method }
     }
 
     @Patch(':id/name')
     async rename(ctx: Context<':id/name'>): Promise<object> {
-      const id = ctx.param('id', int())
+      const id = ctx.param('id', int)
       const user = await ctx.body(UserSchema)
 
       return { id, name: user.name }
@@ -531,8 +531,8 @@ describe('declaration errors', () => {
       @Get(':id', [param('idd')])
       unknownParam(): void {}
 
-      // @ts-expect-error int() gives a number, not a string
-      @Get(':id', [param('id', int())])
+      // @ts-expect-error int gives a number, not a string
+      @Get(':id', [param('id', int)])
       wrongType(id: string): void {
         void id
       }

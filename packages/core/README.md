@@ -63,7 +63,7 @@ class UsersController {
   readonly #users = inject(UsersService)
 
   // Ready values, Nest style
-  @Get(':id', [param('id', int())])
+  @Get(':id', [param('id', int)])
   findOne(id: number) {
     return this.#users.find(id)
   }
@@ -215,7 +215,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponses, ApiTags, OpenApiModule } fro
 @Controller('users')
 @ApiTags('users')
 class UsersController {
-  @Get(':id', [param('id', int())])
+  @Get(':id', [param('id', int)])
   @ApiOperation({ summary: 'One user' })
   @ApiResponses({ 200: { description: 'The user', schema: User }, 404: { description: 'No such user' } })
   findOne(id: number) {}

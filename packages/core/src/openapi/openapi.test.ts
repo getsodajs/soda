@@ -16,12 +16,12 @@ const User = z.object({ id: z.number().int(), name: z.string() })
 @Controller('users')
 @ApiTags('users')
 class UsersController {
-  @Get([query('page', int({ optional: true })), query('sort', z.enum(['asc', 'desc']))])
+  @Get([query('page', int.optional()), query('sort', z.enum(['asc', 'desc']))])
   list(): unknown[] {
     return []
   }
 
-  @Get(':id', [param('id', int()), header('x-request-id', uuid({ optional: true }))])
+  @Get(':id', [param('id', int), header('x-request-id', uuid.optional())])
   @ApiOperation({ summary: 'One user' })
   @ApiResponses({ 200: { description: 'The user', schema: User }, 404: { description: 'No such user' } })
   findOne(): null {

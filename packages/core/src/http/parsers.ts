@@ -6,8 +6,8 @@
  * A Standard Schema (`z.coerce.number().min(1)`) works wherever a parser does.
  *
  * ```ts
- * ctx.param('id', int())                    // number, 400 if not an integer
- * ctx.query('page', int({ optional: true }))  // number | undefined
+ * ctx.param('id', int)                // number, 400 if not an integer
+ * ctx.query('page', int.optional())   // number | undefined
  * ```
  */
 
@@ -22,8 +22,15 @@ export interface Parser<T> {
   readonly parse: (value: string | undefined, name: string) => T
   /** JSON Schema of the accepted strings, for API descriptions such as OpenAPI. */
   readonly jsonSchema?: Readonly<Record<string, unknown>>
-  /** `true` when a missing value is accepted. */
-  readonly optional?: boolean
+  /** `false` when a missing value is accepted. */
+  readonly required?: boolean
+}
+
+/** A parser of a value that must be present, and its variant accepting a missing one. */
+export interface RequiredParser<T> extends Parser<T> {
+  readonly required: true
+  /** The same parser giving `undefined` for a missing value. Like Nest's `{ optional: true }`. */
+  readonly optional: () => Parser<T | undefined>
 }
 
 /** What `param()`, `query()` and `header()` accept to convert a value. */
@@ -31,13 +38,6 @@ export type ValueParser<T> = Parser<T> | StandardSchemaV1<string | undefined, T>
 
 /** Type a parser produces. */
 export type Parsed<P> = P extends Parser<infer T> ? T : P extends StandardSchemaV1 ? InferOutput<P> : never
-
-export interface ParserOptions {
-  /** Accept a missing value, giving `undefined`. Like Nest's `{ optional: true }`. */
-  readonly optional?: boolean
-}
-
-type Result<T, O extends ParserOptions> = O extends { readonly optional: true } ? T | undefined : T
 
 const INTEGER = /^-?\d+$/
 const NUMBER = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/
@@ -47,73 +47,60 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const failure = (name: string, expected: string): BadRequestException =>
   new BadRequestException(`Validation failed for "${name}" (${expected} is expected)`)
 
-const createParser = <T>(
+/**
+ * Builds a parser from `convert`, which gives `undefined` for an invalid value.
+ * Its optional variant accepts a missing value; with `lenient`, an invalid one too.
+ */
+export const defineParser = <T>(
   expected: string,
+  jsonSchema: Readonly<Record<string, unknown>>,
   convert: (value: string) => T | undefined,
-  options: ParserOptions,
-  jsonSchema: Readonly<Record<string, unknown>>
-): Parser<T | undefined> => ({
-  jsonSchema,
-  optional: options.optional === true,
-  parse: (value, name) => {
-    if (value === undefined) {
-      if (options.optional === true) {
-        return undefined
+  lenient = false
+): RequiredParser<T> => {
+  const variant = (required: boolean): Parser<T> => ({
+    jsonSchema,
+    required,
+    parse: (value, name) => {
+      const converted = value === undefined ? undefined : convert(value)
+
+      if (converted === undefined && (required || (value !== undefined && !lenient))) {
+        throw failure(name, expected)
       }
 
-      throw failure(name, expected)
-    }
+      return converted as T
+    },
+  })
+  const optional = variant(false) as Parser<T | undefined>
 
-    const converted = convert(value)
-
-    if (converted === undefined) {
-      throw failure(name, expected)
-    }
-
-    return converted
-  },
-})
+  return { ...variant(true), required: true, optional: () => optional }
+}
 
 /**
  * Integer within `Number.MAX_SAFE_INTEGER`. Unlike Nest's `ParseIntPipe`,
  * `'99999999999999999999'` is rejected instead of being silently rounded.
  */
-export const int = <const O extends ParserOptions = {}>(options?: O): Parser<Result<number, O>> =>
-  createParser(
-    'integer string',
-    (value) => {
-      const number = INTEGER.test(value) ? Number(value) : Number.NaN
+export const int: RequiredParser<number> = defineParser('integer string', { type: 'integer' }, (value) => {
+  const number = INTEGER.test(value) ? Number(value) : Number.NaN
 
-      return Number.isSafeInteger(number) ? number : undefined
-    },
-    options ?? {},
-    { type: 'integer' }
-  ) as Parser<Result<number, O>>
+  return Number.isSafeInteger(number) ? number : undefined
+})
 
 /** Finite decimal number: `'1.5'`, `'-2'`, `'1e3'`. */
-export const number = <const O extends ParserOptions = {}>(options?: O): Parser<Result<number, O>> =>
-  createParser(
-    'numeric string',
-    (value) => {
-      const parsed = NUMBER.test(value) ? Number(value) : Number.NaN
+export const number: RequiredParser<number> = defineParser('numeric string', { type: 'number' }, (value) => {
+  const parsed = NUMBER.test(value) ? Number(value) : Number.NaN
 
-      return Number.isFinite(parsed) ? parsed : undefined
-    },
-    options ?? {},
-    { type: 'number' }
-  ) as Parser<Result<number, O>>
+  return Number.isFinite(parsed) ? parsed : undefined
+})
 
 /** `'true'` or `'false'`. */
-export const boolean = <const O extends ParserOptions = {}>(options?: O): Parser<Result<boolean, O>> =>
-  createParser('boolean string', (value) => (value === 'true' ? true : value === 'false' ? false : undefined), options ?? {}, {
-    type: 'boolean',
-  }) as Parser<Result<boolean, O>>
+export const boolean: RequiredParser<boolean> = defineParser('boolean string', { type: 'boolean' }, (value) =>
+  value === 'true' ? true : value === 'false' ? false : undefined
+)
 
 /** UUID of any version, case-insensitive. */
-export const uuid = <const O extends ParserOptions = {}>(options?: O): Parser<Result<string, O>> =>
-  createParser('UUID string', (value) => (UUID.test(value) ? value : undefined), options ?? {}, { type: 'string', format: 'uuid' }) as Parser<
-    Result<string, O>
-  >
+export const uuid: RequiredParser<string> = defineParser('UUID string', { type: 'string', format: 'uuid' }, (value) =>
+  UUID.test(value) ? value : undefined
+)
 
 /**
  * Applies a parser or a synchronous Standard Schema to a raw value.
