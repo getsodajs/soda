@@ -146,7 +146,7 @@ const noStore = (ctx: Context) => {
 
 ## Middleware
 
-Middleware runs around every request before routing: unknown paths (404), wrong methods (405) and CORS preflights included. It is the place for what concerns HTTP itself: CORS, request ids, access logs, compression.
+Middleware runs around every request before routing: unknown paths (404), wrong methods (405) and CORS preflights included. It is the place for what concerns HTTP itself: CORS, request ids, access logs (`requestLog()`, see [Logging](logging.md#requests)), compression.
 
 ```ts
 const requestId: MiddlewareFunction = async (req, next) => {

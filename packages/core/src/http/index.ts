@@ -63,5 +63,6 @@ export type {
 export type { RouteInfo } from './context.ts'
 export { cors } from './cors.ts'
 export type { CorsOptions } from './cors.ts'
+export { requestLog } from './request-log.ts'
 export type { Middleware, MiddlewareFunction, NestMiddleware, Next } from './middleware.ts'
 export type { FormFields, FormLimits, FormValue } from './body.ts'

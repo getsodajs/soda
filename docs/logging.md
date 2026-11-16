@@ -42,7 +42,25 @@ Levels, from the most verbose: `verbose`, `debug`, `log`, `warn`, `error`, `fata
 
 `child(context)` gives a logger whose entries carry that context, the `UsersService` of the line.
 
-Writing costs nothing on the requests themselves: Soda logs nothing per request, and the summary is drawn once, when the server listens.
+Writing costs nothing on the requests themselves: Soda logs nothing per request unless asked, and the summary is drawn once, when the server listens.
+
+## Requests
+
+`requestLog()` writes one entry per request, once it is answered. Like `cors()`, it is middleware, off unless listed:
+
+```ts
+import { createApp, requestLog } from '@getsoda/core'
+
+await createApp(AppModule, { middleware: [requestLog()] })
+```
+
+```
+23:31:07 LOG HTTP  GET /v1/web/me status=200 ms=3
+23:31:09 WRN HTTP  POST /v1/web/auth/code status=422 ms=1
+23:31:12 ERR HTTP  DELETE /v1/admin/nodes/abc status=500 ms=12
+```
+
+The level follows the status: `log` below 400, `warn` for 4xx, `error` for 5xx. A logger with `level: 'warn'` keeps only the failures; with `json: true`, `status` and `ms` are fields. The query is left out, as it may carry tokens. List it first to time the whole request, other middleware included.
 
 ## Options
 
