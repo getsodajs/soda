@@ -1,0 +1,16 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Soda",
+  "description": "Class-based web framework for Bun (npm @getsoda/core): modules, dependency injection, controllers, guards, interceptors and exception filters written with standard TC39 decorators, compiled into Bun's native router. Validation with Standard Schema (zod, valibot, arktype), OpenAPI, JWT, rate limiting, WebSockets and server-sent events included.",
+  "folders": [
+    "docs"
+  ],
+  "rules": [
+    "Soda runs on Bun 1.4 or later; create a project with `bun create soda my-app` or add `@getsoda/core` to an existing one.",
+    "Use standard TC39 decorators: do not enable experimentalDecorators or emitDecoratorMetadata, and do not import reflect-metadata.",
+    "Get dependencies with `inject(Token)` in a field initializer or a constructor, not with constructor parameters.",
+    "There are no parameter decorators such as @Body() or @Param(): list route arguments in the route decorator, for example `@Get(':id', [param('id', int)])`, or take the `Context` and read `ctx.param()`, `ctx.body()`.",
+    "Validate bodies with a Standard Schema passed to `body(schema)`; do not write DTO classes or use class-validator.",
+    "Import JWT from `@getsoda/core/jwt`, rate limiting from `@getsoda/core/throttler`, OpenAPI from `@getsoda/core/openapi` and test helpers from `@getsoda/core/testing`."
+  ]
+}
