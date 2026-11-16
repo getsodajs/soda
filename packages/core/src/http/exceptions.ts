@@ -92,7 +92,8 @@ export class InternalServerErrorException extends exceptionFor(500, 'Internal Se
 
 export class ServiceUnavailableException extends exceptionFor(503, 'Service Unavailable') {}
 
-const INTERNAL_ERROR_BODY = { statusCode: 500, message: 'Internal server error' }
+/** What the client gets for an error that is not an `HttpException`: nothing of the error itself. */
+export const INTERNAL_ERROR_BODY = { statusCode: 500, message: 'Internal server error' } as const
 
 /**
  * Response for a thrown value: the exception's own response for an `HttpException`,

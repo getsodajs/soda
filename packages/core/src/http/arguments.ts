@@ -23,7 +23,8 @@ import type { Parsed, ValueParser } from './parsers.ts'
 import { isStandardSchema } from './schema.ts'
 import type { InferOutput, StandardSchemaV1 } from './schema.ts'
 
-export type ArgumentKind = 'param' | 'query' | 'header' | 'cookie' | 'body' | 'context' | 'value'
+/** Where an argument comes from; `message` and `socket` exist in WebSocket gateways only. */
+export type ArgumentKind = 'param' | 'query' | 'header' | 'cookie' | 'body' | 'context' | 'value' | 'message' | 'socket'
 
 /**
  * One argument of a handler: where it comes from and how it is read.

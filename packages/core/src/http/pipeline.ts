@@ -122,8 +122,8 @@ const settle = (step: () => unknown): Promise<unknown> => {
   }
 }
 
-/** Runs guards from `index`; synchronous as long as the guards are. */
-const runGuards = (guards: readonly GuardStep[], ctx: Context, index: number): void | Promise<void> => {
+/** Runs guards from `index`; synchronous as long as the guards are. A refusal is a `403`. */
+export const runGuards = (guards: readonly GuardStep[], ctx: Context, index: number): void | Promise<void> => {
   for (let i = index, len = guards.length; i < len; i++) {
     const allowed = guards[i]!(ctx)
 

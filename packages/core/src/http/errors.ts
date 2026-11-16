@@ -15,6 +15,7 @@ import { hideFrameworkFrames } from '../utils/errors.ts'
  * - `UNKNOWN_PARAM`: `param('x')` in an argument list names no parameter of the route path.
  * - `INVALID_PATH`: a WebSocket gateway path that is not static.
  * - `DUPLICATE_ROUTE`: a gateway on the path of another gateway or route.
+ * - `INVALID_ARGUMENT`: an argument where it cannot be read, such as `data()` on a route or `body()` in a gateway.
  */
 export type ControllerErrorCode =
   | 'NOT_A_CONTROLLER'
@@ -24,6 +25,7 @@ export type ControllerErrorCode =
   | 'UNKNOWN_PARAM'
   | 'INVALID_PATH'
   | 'DUPLICATE_ROUTE'
+  | 'INVALID_ARGUMENT'
 
 /**
  * Error thrown by the controller decorators (when the class is defined) and by

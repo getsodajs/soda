@@ -1,14 +1,17 @@
 import { afterAll, describe, expect, it } from 'bun:test'
+import { z } from 'zod'
 import { createApp } from '../app/app.ts'
 import { Module } from '../di/index.ts'
+import { body, query, value } from '../http/arguments.ts'
 import type { Context } from '../http/context.ts'
 import { ContextKey } from '../http/context-key.ts'
 import { Controller, Get } from '../http/decorators.ts'
-import { UseGuards } from '../http/enhancers.ts'
+import { UseGuards, UseInterceptors } from '../http/enhancers.ts'
 import { ControllerError } from '../http/errors.ts'
 import { Logger } from '../logger/index.ts'
 import type { LogEntry } from '../logger/index.ts'
 import { createTestApp } from '../testing/index.ts'
+import { data, socket } from './arguments.ts'
 import { SubscribeMessage, WebSocketGateway } from './decorators.ts'
 import type { GatewaySocket, OnGatewayConnection, OnGatewayDisconnect } from './gateway.ts'
 
@@ -24,6 +27,11 @@ const authenticate = (ctx: Context): boolean => {
 
   return user !== undefined
 }
+
+/** Lets in messages of `ann` only, as a role check would. */
+const annOnly = (ctx: Context): boolean => ctx.get(USER) === 'ann'
+
+const Say = z.object({ text: z.string().min(1) })
 
 const events: string[] = []
 
@@ -53,6 +61,17 @@ class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async fail(): Promise<never> {
     throw new Error('handler failed')
   }
+
+  @SubscribeMessage('post', [data(Say), value(USER), query('room'), socket()])
+  post(message: z.infer<typeof Say>, user: string, room: string | undefined, client: GatewaySocket): unknown {
+    return { event: 'posted', data: { text: message.text, user, room, open: client.readyState === 1 } }
+  }
+
+  @SubscribeMessage('admin')
+  @UseGuards(annOnly)
+  admin(): unknown {
+    return { event: 'admin', data: 'granted' }
+  }
 }
 
 @Module({ controllers: [ChatGateway] })
@@ -73,7 +92,7 @@ afterAll(() => app.close())
 
 /** An open socket and the messages it receives, parsed. */
 const connect = async (user: string) => {
-  const socket = new WebSocket(new URL(`/chat?user=${user}`, app.url.href.replace('http', 'ws')))
+  const socket = new WebSocket(new URL(`/chat?user=${user}&room=lobby`, app.url.href.replace('http', 'ws')))
   const received: unknown[] = []
   const waiting: ((value: unknown) => void)[] = []
 
@@ -124,15 +143,46 @@ describe('WebSocket gateways', () => {
     bo.socket.close()
   })
 
-  it('reports handler errors and keeps the connection', async () => {
+  it('answers handler errors with a bare exception event, reports them and keeps the connection', async () => {
     const cy = await connect('cy')
 
     cy.send({ event: 'fail' })
     cy.send({ event: 'echo', data: 'still open' })
 
+    expect(await cy.next()).toEqual({ event: 'exception', data: { statusCode: 500, message: 'Internal server error', event: 'fail' } })
     expect(await cy.next()).toEqual({ event: 'echo', data: 'still open', user: 'cy' })
     expect(logger.entries.some((entry) => (entry.data?.error as Error | undefined)?.message === 'handler failed')).toBe(true)
     cy.socket.close()
+  })
+
+  it('gives the declared arguments: validated data, values and query of the handshake, the socket', async () => {
+    const ann = await connect('ann')
+
+    ann.send({ event: 'post', data: { text: 'hi' } })
+    ann.send({ event: 'post', data: { text: '' } })
+
+    expect(await ann.next()).toEqual({ event: 'posted', data: { text: 'hi', user: 'ann', room: 'lobby', open: true } })
+    expect(await ann.next()).toEqual({
+      event: 'exception',
+      data: { statusCode: 400, message: [expect.stringContaining('text')], error: 'Bad Request', event: 'post' },
+    })
+    ann.socket.close()
+  })
+
+  it('runs the guards of a handler on each of its messages, with what the handshake set', async () => {
+    const ann = await connect('ann')
+    const bo = await connect('bo')
+
+    ann.send({ event: 'admin' })
+    bo.send({ event: 'admin' })
+
+    expect(await ann.next()).toEqual({ event: 'admin', data: 'granted' })
+    expect(await bo.next()).toEqual({
+      event: 'exception',
+      data: { statusCode: 403, message: 'Forbidden resource', error: 'Forbidden', event: 'admin' },
+    })
+    ann.socket.close()
+    bo.socket.close()
   })
 
   it('lets sockets publish to the topics others subscribed to', async () => {
@@ -187,4 +237,64 @@ describe('WebSocket gateways', () => {
       `@WebSocketGateway('/rooms/:id'): a gateway path is static and starts with "/"`
     )
   })
+
+  it('refuses at startup the arguments and enhancers a message cannot have', async () => {
+    const refusal = async (gateway: new () => unknown): Promise<string> => {
+      @Module({ controllers: [gateway] })
+      class BrokenModule {}
+
+      const error = (await createApp(BrokenModule, { logger: false }).catch((caught: unknown) => caught)) as ControllerError
+
+      return `${error.code}: ${error.message}`
+    }
+
+    @WebSocketGateway('/a')
+    class BodyGateway {
+      @SubscribeMessage('x', [body()])
+      x(_body: unknown): void {}
+    }
+
+    @WebSocketGateway('/b')
+    class InterceptedGateway {
+      @SubscribeMessage('x')
+      @UseInterceptors((_ctx, next) => next())
+      x(): void {}
+    }
+
+    @WebSocketGateway('/c')
+    class TwiceGateway {
+      @SubscribeMessage('x')
+      first(): void {}
+
+      @SubscribeMessage('x')
+      second(): void {}
+    }
+
+    @Controller('/d')
+    class DataController {
+      @Get([data()])
+      read(_data: unknown): void {}
+    }
+
+    expect(await refusal(BodyGateway)).toBe('INVALID_ARGUMENT: BodyGateway.x: a message has no request body, read it with data()')
+    expect(await refusal(InterceptedGateway)).toBe(
+      'INVALID_HANDLER: InterceptedGateway.x: message handlers take guards, not interceptors or exception filters'
+    )
+    expect(await refusal(TwiceGateway)).toBe('DUPLICATE_ROUTE: TwiceGateway.second: another method of TwiceGateway handles "x"')
+    expect(await refusal(DataController)).toBe('INVALID_ARGUMENT: DataController.read: data() is an argument of @SubscribeMessage(), not of a route')
+  })
+
+  // Checked by the type checker only, never called.
+  const typeErrors = (): void => {
+    @WebSocketGateway('/typed')
+    class Typed {
+      // @ts-expect-error the data is a { text: string }, not a number
+      @SubscribeMessage('post', [data(Say)])
+      post(_message: number): void {}
+    }
+
+    void Typed
+  }
+
+  void typeErrors
 })

@@ -2,22 +2,32 @@
  * @module
  * Serving a gateway: the handshake goes through the route pipeline (guards
  * and exception filters of the gateway), then frames are dispatched to its
- * `@SubscribeMessage()` methods.
+ * `@SubscribeMessage()` methods, through the guards of each method.
  *
  * The protocol is the one of Nest's `WsAdapter`: text frames holding
  * `{ "event": string, "data": any }`. Frames that are not JSON, not such an
  * object, or name no handled event are dropped silently, as anyone can send
- * them; errors of the gateway's own code are reported.
+ * them. A handler that fails is answered with
+ * `{ "event": "exception", "data": { statusCode, message, event } }`, like
+ * Nest's `BaseWsExceptionFilter`: the body of an `HttpException`, or a `500`
+ * without details for any other error, which is reported.
  */
 
 import type { ControllerEntry } from '../di/index.ts'
+import type { Argument } from '../http/arguments.ts'
 import { parseJson } from '../http/body.ts'
 import type { Context, RouteInfo } from '../http/context.ts'
-import { createPipeline } from '../http/pipeline.ts'
+import type { Guard } from '../http/enhancers.ts'
+import { getMethodEnhancers } from '../http/enhancers.ts'
+import { ControllerError } from '../http/errors.ts'
+import { HttpException, INTERNAL_ERROR_BODY } from '../http/exceptions.ts'
+import { createPipeline, runGuards } from '../http/pipeline.ts'
 import type { FilterStep, GuardStep } from '../http/pipeline.ts'
+import { validate } from '../http/schema.ts'
+import type { StandardSchemaV1 } from '../http/schema.ts'
 import { methodNames } from '../utils/object.ts'
 import { isThenable } from '../utils/promise.ts'
-import { getSubscribedEvent } from './decorators.ts'
+import { getSubscribedMessage } from './decorators.ts'
 
 /** What a gateway socket carries. */
 export interface GatewaySocketData {
@@ -58,25 +68,20 @@ const settle = (fn: () => unknown, report: (error: unknown) => void, then?: (val
   }
 }
 
+/** Handles the `data` of one event for one socket; may return a promise. */
+type MessageHandler = (data: unknown, socket: GatewaySocket) => unknown
+
 /** The live part of a gateway: its sockets and handlers. */
 export class GatewayRuntime {
   readonly #instance: Record<string, unknown>
-  readonly #handlers = new Map<string, (data: unknown, socket: GatewaySocket) => unknown>()
+  readonly #handlers: ReadonlyMap<string, MessageHandler>
   readonly #sockets = new Set<GatewaySocket>()
   readonly #onError: (error: unknown, req: Request) => void
 
-  constructor(instance: object, onError: (error: unknown, req: Request) => void) {
+  constructor(instance: object, handlers: ReadonlyMap<string, MessageHandler>, onError: (error: unknown, req: Request) => void) {
     this.#instance = instance as Record<string, unknown>
+    this.#handlers = handlers
     this.#onError = onError
-
-    for (const name of methodNames(instance)) {
-      const method = this.#instance[name] as (data: unknown, socket: GatewaySocket) => unknown
-      const event = getSubscribedEvent(method)
-
-      if (event !== undefined) {
-        this.#handlers.set(event, method)
-      }
-    }
   }
 
   get events(): readonly string[] {
@@ -97,14 +102,26 @@ export class GatewayRuntime {
     }
 
     settle(
-      () => handler.call(this.#instance, frame!.data, socket),
-      (error) => this.#onError(error, socket.data.context.req),
+      () => handler(frame!.data, socket),
+      (error) => this.#fail(socket, frame!.event, error),
       (result) => {
         if (result !== undefined) {
           this.#send(socket, result)
         }
       }
     )
+  }
+
+  /** Tells the client its message failed; only an `HttpException` says why. */
+  #fail(socket: GatewaySocket, event: string, error: unknown): void {
+    if (error instanceof HttpException) {
+      this.#send(socket, { event: 'exception', data: { ...error.response, event } })
+
+      return
+    }
+
+    this.#onError(error, socket.data.context.req)
+    this.#send(socket, { event: 'exception', data: { ...INTERNAL_ERROR_BODY, event } })
   }
 
   close(socket: GatewaySocket, code: number, reason: string): void {
@@ -169,8 +186,11 @@ const UPGRADED = Symbol('upgraded')
 export interface GatewayParts {
   readonly entry: ControllerEntry
   readonly path: string
+  /** Of the handshake: global and class guards. */
   readonly guards: readonly GuardStep[]
   readonly filters: readonly FilterStep[]
+  /** Resolves the guards of a handler in the module of the gateway. */
+  readonly resolveGuard: (guard: Guard) => GuardStep
   readonly metadata: ReadonlyMap<symbol, unknown>
   readonly onError: (error: unknown, req: Request) => void
 }
@@ -183,8 +203,106 @@ export interface BuiltGateway {
   readonly handle: (req: Bun.BunRequest, server: Bun.Server<GatewaySocketData>) => Response | undefined | Promise<Response | undefined>
 }
 
+/** Reads one argument of a message: its data, its socket, or a value of the handshake. */
+type MessageReader = (data: unknown, socket: GatewaySocket) => unknown
+
+const readerOf = (arg: Argument<unknown>, label: string): MessageReader => {
+  if (arg.kind === 'message') {
+    const schema = arg.source as StandardSchemaV1 | undefined
+
+    return schema === undefined ? (data) => data : (data) => validate(schema, data, '')
+  }
+
+  if (arg.kind === 'socket') {
+    return (_data, socket) => socket
+  }
+
+  if (arg.kind === 'body') {
+    throw new ControllerError('INVALID_ARGUMENT', `${label}: a message has no request body, read it with data()`)
+  }
+
+  if (arg.kind === 'param') {
+    throw new ControllerError('INVALID_ARGUMENT', `${label}: param('${arg.name}') names no parameter, as a gateway path has none`)
+  }
+
+  return (_data, socket) => arg.read(socket.data.context)
+}
+
+/** Calls the method with `(data, socket)`, or with the declared arguments once they are read. */
+const createMessageHandler = (
+  instance: object,
+  method: (...args: unknown[]) => unknown,
+  args: readonly Argument<unknown>[] | undefined,
+  guards: readonly GuardStep[],
+  label: string
+): MessageHandler => {
+  const readers = args?.map((arg) => readerOf(arg, label))
+
+  const invoke: MessageHandler =
+    readers === undefined
+      ? (data, socket) => method.call(instance, data, socket)
+      : (data, socket) => {
+          const values: unknown[] = []
+          let pending = false
+
+          for (const read of readers) {
+            const value = read(data, socket)
+
+            pending ||= isThenable(value)
+            values.push(value)
+          }
+
+          return pending ? Promise.all(values).then((ready) => method.apply(instance, ready)) : method.apply(instance, values)
+        }
+
+  if (guards.length === 0) {
+    return invoke
+  }
+
+  // The context of the handshake: what its guards set is there for these ones.
+  return (data, socket) => {
+    const gate = runGuards(guards, socket.data.context, 0)
+
+    return gate === undefined ? invoke(data, socket) : gate.then(() => invoke(data, socket))
+  }
+}
+
+/** The handlers of a gateway, by event: the most derived method of an event wins. */
+const collectHandlers = (parts: GatewayParts): Map<string, MessageHandler> => {
+  const instance = parts.entry.instance as Record<string, (...args: unknown[]) => unknown>
+  const gateway = parts.entry.controller.name
+  const handlers = new Map<string, MessageHandler>()
+
+  for (const name of methodNames(instance)) {
+    const method = instance[name]!
+    const subscribed = getSubscribedMessage(method)
+
+    if (subscribed === undefined) {
+      continue
+    }
+
+    const label = `${gateway}.${name}`
+    const enhancers = getMethodEnhancers(method)
+
+    if (handlers.has(subscribed.event)) {
+      throw new ControllerError('DUPLICATE_ROUTE', `${label}: another method of ${gateway} handles "${subscribed.event}"`)
+    }
+
+    if (enhancers.interceptors.length > 0 || enhancers.filters.length > 0) {
+      throw new ControllerError('INVALID_HANDLER', `${label}: message handlers take guards, not interceptors or exception filters`)
+    }
+
+    handlers.set(
+      subscribed.event,
+      createMessageHandler(instance, method, subscribed.args, enhancers.guards.map(parts.resolveGuard), label)
+    )
+  }
+
+  return handlers
+}
+
 export const buildGateway = (parts: GatewayParts): BuiltGateway => {
-  const runtime = new GatewayRuntime(parts.entry.instance as object, parts.onError)
+  const runtime = new GatewayRuntime(parts.entry.instance as object, collectHandlers(parts), parts.onError)
   const route: RouteInfo = { controller: parts.entry.controller, handler: 'handshake', method: 'GET', path: parts.path, metadata: parts.metadata }
   // The pipeline is built once; the server of each request is found here.
   const servers = new WeakMap<Request, Bun.Server<GatewaySocketData>>()

@@ -68,6 +68,15 @@ const joinPaths = (...parts: readonly string[]): string => {
   return path || '/'
 }
 
+/** `data()` and `socket()` belong to gateways: a request has neither. */
+const assertHttpArguments = (args: readonly Argument<unknown>[], name: string): void => {
+  for (const arg of args) {
+    if (arg.kind === 'message' || arg.kind === 'socket') {
+      throw new ControllerError('INVALID_ARGUMENT', `${name}: ${arg.kind === 'message' ? 'data' : 'socket'}() is an argument of @SubscribeMessage(), not of a route`)
+    }
+  }
+}
+
 /** Every `param()` must name a parameter of the full path, controller prefix included. */
 const assertParamsExist = (args: readonly Argument<unknown>[], path: string, name: string): void => {
   const names = new Set<string>()
@@ -203,6 +212,7 @@ class RoutesBuilder {
         path: joinPaths(options.prefix ?? '', gatewayPath),
         guards: resolveAll([options.guards ?? [], controller.guards, []], this.#global.guard, local.guard),
         filters: resolveAll([options.filters ?? [], controller.filters, []], this.#global.filter, local.filter).reverse(),
+        resolveGuard: local.guard,
         metadata: controller.metadata,
         onError: this.#onError,
       })
@@ -249,6 +259,7 @@ class RoutesBuilder {
       const info: RouteInfo = { controller: entry.controller, handler: name, method: route.method, path, metadata: routeMetadata }
 
       if (route.args !== undefined) {
+        assertHttpArguments(route.args, `${entry.controller.name}.${name}`)
         assertParamsExist(route.args, path, `${entry.controller.name}.${name}`)
       }
 

@@ -60,6 +60,12 @@ export interface ListenOptions {
    * handler runs. Bun's default is 128 MiB.
    */
   readonly maxRequestBodySize?: number
+  /**
+   * Limits of WebSocket connections, Bun's defaults otherwise: frames up to
+   * `maxPayloadLength` bytes (16 MiB; a bigger one closes the connection with
+   * `1009`), `idleTimeout` seconds without traffic (120) before closing.
+   */
+  readonly websocket?: Pick<Bun.WebSocketHandler<GatewaySocketData>, 'maxPayloadLength' | 'idleTimeout' | 'backpressureLimit' | 'sendPings' | 'perMessageDeflate'>
 }
 
 /** Signals `enableShutdownSignals()` listens to by default. */
@@ -131,9 +137,9 @@ class Application implements App {
       throw new Error(`The application already listens on ${this.#server.url.href}`)
     }
 
-    const { port = 0, hostname, maxRequestBodySize } = typeof options === 'number' ? { port: options } : options
+    const { port = 0, hostname, maxRequestBodySize, websocket } = typeof options === 'number' ? { port: options } : options
 
-    const server = Bun.serve({ port, hostname, maxRequestBodySize, ...this.routes })
+    const server = Bun.serve({ port, hostname, maxRequestBodySize, ...this.routes, websocket: { ...this.routes.websocket, ...websocket } })
 
     this.#server = server
 
