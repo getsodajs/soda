@@ -40,6 +40,10 @@
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
     },
+    "./throttler": {
+      "types": "./dist/throttler/index.d.ts",
+      "default": "./dist/throttler/index.js"
+    },
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",
