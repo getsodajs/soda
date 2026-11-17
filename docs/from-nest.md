@@ -26,7 +26,6 @@ Soda uses neither. What a method receives is listed in its route decorator, and 
 | `@Get(':id') findOne(@Param('id', ParseIntPipe) id: number)` | `@Get(':id', [param('id', int)]) findOne(id: number)` |
 | `@Body() dto: CreateUserDto` + `class-validator` | `[body(CreateUser)]` with a zod (or valibot, arktype) schema |
 | `@Query('page', new DefaultValuePipe(1), ParseIntPipe)` | `[query('page', z.coerce.number().default(1))]` |
-| `ClassSerializerInterceptor` + `@Exclude()` on an entity | `@Returns(User)` with a schema of what is sent |
 | `@Req()`, `@Res({ passthrough: true })` | `[context()]`: `ctx.req`, `ctx.cookies`, `ctx.responseHeaders` |
 | `@UploadedFile()` + multer | `[form(schema, limits)]`, files are `File`s |
 | `@Headers('x')`, `@Ip()` | `[header('x')]`, `ctx.ip` |

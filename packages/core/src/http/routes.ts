@@ -29,8 +29,6 @@ import { ControllerError } from './errors.ts'
 import { createEnhancerResolver, createPipeline } from './pipeline.ts'
 import type { EnhancerResolver } from './pipeline.ts'
 import { createResponder } from './response.ts'
-import { formatIssues } from './schema.ts'
-import type { StandardSchemaV1 } from './schema.ts'
 import { createSseResponder } from './sse.ts'
 import { getGatewayPath } from '../websocket/decorators.ts'
 import { buildGateway } from '../websocket/gateway.ts'
@@ -132,37 +130,6 @@ const createInvoker = (
     }
 
     return pending ? Promise.all(values).then((ready) => method.apply(instance, ready)) : method.apply(instance, values)
-  }
-}
-
-/**
- * Passes what the handler returns through its `@Returns()` schema, before
- * interceptors see it. A refused value is a bug of the server: a plain error,
- * answered `500`, its issues in the log only.
- */
-const withReturns = (invoke: (ctx: Context) => unknown, schema: StandardSchemaV1, handler: string): ((ctx: Context) => unknown) => {
-  const settle = (outcome: StandardSchemaV1.Result<unknown>): unknown => {
-    if (outcome.issues !== undefined) {
-      throw new Error(`${handler} returned a value its @Returns() schema refuses: ${formatIssues(outcome.issues, '').join('; ')}`)
-    }
-
-    return outcome.value
-  }
-
-  const check = (value: unknown): unknown => {
-    if (value instanceof Response) {
-      return value
-    }
-
-    const result = schema['~standard'].validate(value)
-
-    return isThenable(result) ? Promise.resolve(result).then(settle) : settle(result)
-  }
-
-  return (ctx) => {
-    const value = invoke(ctx)
-
-    return isThenable(value) ? Promise.resolve(value).then(check) : check(value)
   }
 }
 
@@ -327,19 +294,13 @@ class RoutesBuilder {
         assertParamsExist(route.args, path, `${entry.controller.name}.${name}`)
       }
 
-      if (route.sse && metadata.returns !== undefined) {
-        throw new ControllerError('INVALID_RETURNS', `${entry.controller.name}.${name}: @Returns() does not apply to @Sse(), which streams events`)
-      }
-
       const status = statusOf(metadata, route)
-      const invoke = createInvoker(instance, method, route.args)
 
       this.#mapped.push({
         info,
         args: route.args,
         status,
         sse: route.sse,
-        returns: metadata.returns,
         guards: guardNames,
         interceptors: interceptorNames,
         guardTypes: [...(options.guards ?? []), ...controller.guards, ...own.guards],
@@ -353,7 +314,7 @@ class RoutesBuilder {
           guards,
           interceptors,
           filters,
-          invoke: metadata.returns === undefined ? invoke : withReturns(invoke, metadata.returns, `${entry.controller.name}.${name}`),
+          invoke: createInvoker(instance, method, route.args),
           respond: route.sse ? createSseResponder(metadata.headers, this.#onError) : createResponder(status, metadata.headers),
           onError: this.#onError,
         }),
@@ -372,8 +333,6 @@ export interface MappedRoute {
   readonly status: number
   /** Declared with `@Sse()`. */
   readonly sse: boolean
-  /** Schema of what the handler returns, from `@Returns()`. */
-  readonly returns: StandardSchemaV1 | undefined
   /** Names of the guards declared on the controller and the method, global ones left out. */
   readonly guards: readonly string[]
   /** Names of the interceptors declared on the controller and the method. */

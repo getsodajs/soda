@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Module } from '../di/index.ts'
 import type { Constructor, ModuleClass } from '../di/index.ts'
 import { body, cookie, form, header, param, query } from '../http/arguments.ts'
-import { All, Controller, Get, HttpCode, Post, Returns, Sse } from '../http/decorators.ts'
+import { All, Controller, Get, HttpCode, Post, Sse } from '../http/decorators.ts'
 import { getClassEnhancers, UseGuards } from '../http/enhancers.ts'
 import type { CanActivate } from '../http/enhancers.ts'
 import { int, uuid } from '../http/parsers.ts'
@@ -249,22 +249,8 @@ describe('decorators', () => {
   @ApiTags('products')
   class CatalogController {
     @Get()
-    @Returns(z.array(User))
-    list() {
-      return []
-    }
-
-    @Get('name')
-    @Returns(z.string())
-    name() {
-      return 'Shop'
-    }
-
-    @Post()
-    @Returns(User)
-    @ApiResponses({ 201: { description: 'The product' } })
-    add() {
-      return { id: 1, name: 'Tea' }
+    list(): null {
+      return null
     }
   }
 
@@ -289,7 +275,7 @@ describe('decorators', () => {
   it('tags a controller with its path, unless it declares its tags; those of a method add to them', async () => {
     const { paths } = await document()
 
-    expect(Object.keys(paths)).toEqual(['/v1/orders/{shop}/mine', '/v1/orders/{shop}', '/v1/orders/{shop}/open', '/catalog', '/catalog/name'])
+    expect(Object.keys(paths)).toEqual(['/v1/orders/{shop}/mine', '/v1/orders/{shop}', '/v1/orders/{shop}/open', '/catalog'])
     expect(paths['/v1/orders/{shop}/mine']!.get!.tags).toEqual(['v1/orders', 'me'])
     expect(paths['/catalog']!.get!.tags).toEqual(['products'])
   })
@@ -320,18 +306,6 @@ describe('decorators', () => {
       403: error('Forbidden'),
       409: error('Already placed'),
     })
-  })
-
-  it('describes the success with the schema of @Returns(), which a declared response replaces', async () => {
-    const { paths } = await document()
-    const user = { type: 'object', properties: { id: expect.any(Object), name: { type: 'string' } }, required: ['id', 'name'], additionalProperties: false }
-
-    expect(paths['/catalog']!.get!.responses[200]).toEqual({
-      description: 'Success',
-      content: { 'application/json': { schema: { type: 'array', items: user } } },
-    })
-    expect(paths['/catalog/name']!.get!.responses[200]).toEqual({ description: 'Success', content: { 'text/plain': { schema: { type: 'string' } } } })
-    expect(paths['/catalog']!.post!.responses[201]).toEqual({ description: 'The product' })
   })
 
   it('knows the guards of Soda', () => {

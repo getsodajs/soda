@@ -194,17 +194,9 @@ const layersOf = <T>(route: MappedRoute, key: symbol, guards = true): T[] => {
   return values.filter((entry) => entry !== undefined) as T[]
 }
 
-/** A string is sent as `text/plain`, anything else as JSON. */
-const contentOf = (schema: JsonSchema): Record<string, { schema: JsonSchema }> =>
-  schema.type === 'string' ? { 'text/plain': { schema } } : { 'application/json': { schema } }
-
-/** The success of a route: its `@Returns()` schema, when given. */
-const successOf = (route: MappedRoute): Responses[string] =>
-  route.returns === undefined ? { description: 'Success' } : { description: 'Success', content: contentOf(toJsonSchema(route.returns, 'output')) }
-
 const describeResponse = (status: string, response: ApiResponseOptions): Responses[string] => {
   if (response.schema !== undefined) {
-    return { description: response.description, content: contentOf(toJsonSchema(response.schema, 'output')) }
+    return { description: response.description, content: { 'application/json': { schema: toJsonSchema(response.schema, 'output') } } }
   }
 
   return Number(status) >= 400 ? { description: response.description, content: { 'application/json': { schema: ERROR_REF } } } : { description: response.description }
@@ -237,7 +229,7 @@ const inputErrors = (args: readonly Argument<unknown>[]): Record<number, string>
 const responsesOf = (route: MappedRoute): Responses => {
   const responses: Responses = route.sse
     ? { 200: { description: 'Event stream', content: { 'text/event-stream': { schema: STRING } } } }
-    : { [route.status]: successOf(route) }
+    : { [route.status]: { description: 'Success' } }
   const found: Record<number, string> = inputErrors(route.args ?? [])
 
   for (const guard of route.guardTypes) {

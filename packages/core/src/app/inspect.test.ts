@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { inject, InjectionToken, Injectable, Module, optional, provide } from '../di/index.ts'
-import { body, Controller, cors, form, Get, int, param, Post, query, Returns, UseGuards } from '../http/index.ts'
+import { body, Controller, cors, form, Get, int, param, Post, query, UseGuards } from '../http/index.ts'
 import type { CanActivate } from '../http/index.ts'
 import { Logger } from '../logger/index.ts'
 import { VERSION } from '../version.ts'
@@ -52,10 +52,7 @@ describe('inspectApp', () => {
     findOne(): void {}
 
     @Post('', [body(CreateUser)])
-    @Returns(CreateUser)
-    create() {
-      return { name: 'Ada' }
-    }
+    create(): void {}
 
     @Post('avatar', [form(z.object({ avatar: z.instanceof(File) }))])
     avatar(): void {}
@@ -120,7 +117,7 @@ describe('inspectApp', () => {
     ])
   })
 
-  it('describes each route: what it reads and returns with their JSON Schema, its guards, its module', async () => {
+  it('describes each route: what it reads with its JSON Schema, its guards, its module', async () => {
     const { routes } = await inspectApp(UsersModule)
 
     expect(routes).toEqual([
@@ -148,7 +145,6 @@ describe('inspectApp', () => {
         interceptors: [],
         status: 201,
         sse: false,
-        returns: expect.objectContaining({ type: 'object', additionalProperties: false }),
       },
       {
         method: 'POST',

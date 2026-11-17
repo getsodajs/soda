@@ -116,28 +116,19 @@ What the method returns becomes the response, as in Nest:
 
 The status is `201` for `POST` and `200` otherwise; `@HttpCode(204)` changes it. `204`, `205` and `304` never get a body. `@Header(name, value)` adds a header to the responses built from returned values. A returned `Response` keeps its own status and headers.
 
-### What a route returns
-
-`@Returns(schema)` declares it: the returned value goes through the schema before it is sent, so a field the schema does not declare stays on the server.
+What the method returns is what is sent: to send less than a database row holds, say it in the method.
 
 ```ts
-const UserRow = z.object({ id: z.number().int(), name: z.string(), passwordHash: z.string() })
 const User = UserRow.omit({ passwordHash: true })
 
 @Get(':id', [param('id', int)])
-@Returns(User)
+@ApiResponses({ 200: { description: 'The user', schema: User }, 404: { description: 'No such user' } })
 async findOne(id: number) {
-  return this.users.find(id)   // the row from the database: sent without passwordHash
+  return User.parse(await this.users.find(id))   // z.object() leaves out the fields it does not declare
 }
 ```
 
-- The method must return what the schema accepts, or a promise of it: a missing field is a type error. More fields are fine, they are left out.
-- What is sent is the output of the schema: a `.transform()` applies, and interceptors see that output.
-- A value the schema refuses is a bug of the server: `500`, the issues in the log, never in the response.
-- A returned `Response` is sent as is. `@Sse()` routes cannot have one: they stream events.
-- The OpenAPI document describes the response with it, and `soda inspect` lists it.
-
-It belongs to the controller, not the service: the service returns the whole record, which it may need itself (a password hash to check), and two routes may send the same record in two shapes.
+The same schema documents the response, see [OpenAPI](openapi.md#decorators).
 
 Errors are responses too: throw an `HttpException` and its body is sent with its status.
 

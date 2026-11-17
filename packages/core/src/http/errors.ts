@@ -16,7 +16,6 @@ import { hideFrameworkFrames } from '../utils/errors.ts'
  * - `INVALID_PATH`: a WebSocket gateway path that is not static.
  * - `DUPLICATE_ROUTE`: a gateway on the path of another gateway or route.
  * - `INVALID_ARGUMENT`: an argument where it cannot be read, such as `data()` on a route or `body()` in a gateway.
- * - `INVALID_RETURNS`: `@Returns()` without a schema, twice on one method, or on an `@Sse()` route.
  */
 export type ControllerErrorCode =
   | 'NOT_A_CONTROLLER'
@@ -27,7 +26,6 @@ export type ControllerErrorCode =
   | 'INVALID_PATH'
   | 'DUPLICATE_ROUTE'
   | 'INVALID_ARGUMENT'
-  | 'INVALID_RETURNS'
 
 /**
  * Error thrown by the controller decorators (when the class is defined) and by

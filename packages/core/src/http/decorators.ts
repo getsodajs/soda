@@ -32,8 +32,6 @@ import type { Constructor } from '../di/index.ts'
 import type { Argument, ArgumentValues } from './arguments.ts'
 import type { Context } from './context.ts'
 import { ControllerError } from './errors.ts'
-import { isStandardSchema } from './schema.ts'
-import type { InferInput, StandardSchemaV1 } from './schema.ts'
 
 /**
  * Route declared on a method.
@@ -56,8 +54,6 @@ export interface HandlerMetadata {
   status: number | undefined
   /** In declaration order, top to bottom; a name may repeat. */
   readonly headers: [string, string][]
-  /** Schema of what the method returns, from `@Returns()`. */
-  returns: StandardSchemaV1 | undefined
 }
 
 /**
@@ -141,7 +137,7 @@ const metadataOf = (method: object): HandlerMetadata => {
   let metadata = handlers.get(method)
 
   if (metadata === undefined) {
-    metadata = { routes: [], status: undefined, headers: [], returns: undefined }
+    metadata = { routes: [], status: undefined, headers: [] }
     handlers.set(method, metadata)
   }
 
@@ -277,54 +273,6 @@ export const Header =
 
 /** Path of a `@Controller()` class, `undefined` if the class is not a controller. */
 export const getControllerPath = (target: Constructor<unknown>): string | undefined => controllers.get(target)
-
-/**
- * Decorator returned by `@Returns()`: fits a method returning what the schema
- * accepts (or a `Response`), directly or through a promise.
- */
-// oxlint-disable-next-line typescript/no-explicit-any
-export type ReturnsDecorator<S extends StandardSchemaV1> = <This, M extends (this: This, ...args: any) => Returned<InferInput<S>>>(
-  method: M,
-  context: ClassMethodDecoratorContext<This, M>
-) => void
-
-type Returned<T> = T | Response | Promise<T | Response>
-
-/**
- * What the method returns, as a schema: the value is passed through it before it
- * is sent, so fields the schema does not declare are left out (`z.object()` strips
- * them), and the OpenAPI document describes the response with it.
- *
- * ```ts
- * const User = UserRow.omit({ passwordHash: true })
- *
- * @Get(':id', [param('id', int)])
- * @Returns(User)
- * findOne(id: number) {
- *   return this.users.find(id)   // sent without passwordHash
- * }
- * ```
- *
- * A value the schema refuses is a bug of the server: the client gets `500`, the
- * log the issues. A returned `Response` is sent as is.
- */
-export const Returns =
-  <S extends StandardSchemaV1>(schema: S): ReturnsDecorator<S> =>
-  (target, context) => {
-    assertPublicMethod('Returns', context)
-
-    if (!isStandardSchema(schema)) {
-      throw new ControllerError('INVALID_RETURNS', `@Returns() on ${String(context.name)} takes a schema, such as z.object({ ... })`)
-    }
-
-    const metadata = metadataOf(target)
-
-    if (metadata.returns !== undefined) {
-      throw new ControllerError('INVALID_RETURNS', `${String(context.name)} has more than one @Returns()`)
-    }
-
-    metadata.returns = schema
-  }
 
 /** Metadata of a method, `undefined` if no decorator touched it. */
 export const getHandlerMetadata = (method: unknown): HandlerMetadata | undefined =>
