@@ -1,6 +1,6 @@
 {
   "name": "create-soda",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Create a Soda project: bun create soda my-app",
   "keywords": [
     "soda",
