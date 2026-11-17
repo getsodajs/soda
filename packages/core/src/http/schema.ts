@@ -59,6 +59,9 @@ export declare namespace StandardSchemaV1 {
 /** Type a schema produces. */
 export type InferOutput<S extends StandardSchemaV1> = NonNullable<S['~standard']['types']>['output']
 
+/** Type a schema accepts. */
+export type InferInput<S extends StandardSchemaV1> = NonNullable<S['~standard']['types']>['input']
+
 /** Nest's default cap on the total length of validation messages. */
 const MAX_MESSAGES_LENGTH = 1_000_000
 const OMITTED = 'Further validation errors were omitted'

@@ -9,13 +9,14 @@ export { Context } from './context.ts'
 export { CookieSigner, signed } from './cookies.ts'
 export { ContextKey } from './context-key.ts'
 export type { ContextParams, ParamNameOf } from './context.ts'
-export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Route, Sse } from './decorators.ts'
+export { All, Controller, Delete, Get, Head, Header, HttpCode, Options, Patch, Post, Put, Returns, Route, Sse } from './decorators.ts'
 export { formatSseMessage } from './sse.ts'
 export type { SseMessage } from './sse.ts'
 export type {
   ArgumentsRouteDecorator,
   MethodMetadataDecorator,
   MethodRouteDecoratorFactory,
+  ReturnsDecorator,
   RouteDecorator,
   RouteDecoratorFactory,
   RouteHandlerHint,
@@ -42,7 +43,7 @@ export { boolean, int, number, uuid } from './parsers.ts'
 export type { Parsed, Parser, RequiredParser, ValueParser } from './parsers.ts'
 export { buildRoutes, controllerRoutes, ROUTES } from './routes.ts'
 export type { BuiltRoutes, ControllerRoutesOptions, MappedController, MappedRoute, RouteRegistry } from './routes.ts'
-export type { InferOutput, StandardSchemaV1 } from './schema.ts'
+export type { InferInput, InferOutput, StandardSchemaV1 } from './schema.ts'
 export type { AnyParams, PathParams } from './types.ts'
 export { Catch, createDecorator, UseFilters, UseGuards, UseInterceptors } from './enhancers.ts'
 export type {

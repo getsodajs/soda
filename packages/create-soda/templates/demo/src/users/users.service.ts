@@ -1,10 +1,10 @@
 import { inject, Logger } from '@getsoda/core'
+import { z } from 'zod'
 
-export interface User {
-  readonly id: number
-  readonly name: string
-  readonly createdBy: string
-}
+/** A user, as the API sends it: `@Returns(User)` leaves out any other field. */
+export const User = z.object({ id: z.number().int(), name: z.string(), createdBy: z.string() })
+
+export type User = z.infer<typeof User>
 
 export class UsersService {
   readonly #logger = inject(Logger).child('UsersService')

@@ -1,9 +1,8 @@
-import { body, Controller, Get, inject, int, NotFoundException, param, Post, UseGuards, value } from '@getsoda/core'
+import { body, Controller, Get, inject, int, NotFoundException, param, Post, Returns, UseGuards, value } from '@getsoda/core'
 import { JWT_PAYLOAD, JwtGuard } from '@getsoda/core/jwt'
 import type { JwtPayload } from '@getsoda/core/jwt'
 import { z } from 'zod'
-import { UsersService } from './users.service.ts'
-import type { User } from './users.service.ts'
+import { User, UsersService } from './users.service.ts'
 
 const CreateUser = z.object({ name: z.string().trim().min(1) })
 
@@ -14,12 +13,14 @@ export class UsersController {
   readonly #users = inject(UsersService)
 
   @Get()
-  list(): User[] {
+  @Returns(z.array(User))
+  list() {
     return this.#users.list()
   }
 
   @Get(':id', [param('id', int)])
-  findOne(id: number): User {
+  @Returns(User)
+  findOne(id: number) {
     const user = this.#users.find(id)
 
     if (user === undefined) {
@@ -31,7 +32,8 @@ export class UsersController {
 
   @Post([body(CreateUser), value(JWT_PAYLOAD)])
   @UseGuards(JwtGuard)
-  create(input: CreateUser, author: JwtPayload): User {
+  @Returns(User)
+  create(input: CreateUser, author: JwtPayload) {
     return this.#users.create(input.name, author.sub ?? 'unknown')
   }
 }

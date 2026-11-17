@@ -60,6 +60,8 @@ export interface InspectRoute {
   readonly interceptors: readonly string[]
   /** Status of the responses built from returned values. */
   readonly status?: number
+  /** What the handler returns, from `@Returns()`. */
+  readonly returns?: JsonSchema
   readonly sse?: boolean
   /** Events a gateway handles. */
   readonly events?: readonly string[]
@@ -111,6 +113,7 @@ const describeRoutes = (built: BuiltRoutes, moduleOf: ReadonlyMap<unknown, strin
         interceptors: route.interceptors,
         status: route.status,
         sse: route.sse,
+        ...(route.returns === undefined ? {} : { returns: toJsonSchema(route.returns, 'output') }),
       })
     }
   }

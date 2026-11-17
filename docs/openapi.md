@@ -1,6 +1,6 @@
 # OpenAPI
 
-`@getsoda/core/openapi` builds the document from your code: everything the routes already declare is described, with no decorator. Decorators add what code cannot say (a summary, the schema of what a handler returns), or replace what the document found.
+`@getsoda/core/openapi` builds the document from your code: everything the routes already declare is described, with no decorator. Decorators add what code cannot say (a summary, a description, the errors a handler throws), or replace what the document found.
 
 Nothing is written twice: no `@ApiProperty()` on each field of a DTO, as `@nestjs/swagger` needs. The schema that validates a request is the one documented.
 
@@ -28,7 +28,7 @@ That is the whole setup: there is nothing to turn on. The document is served at 
 | paths, `:id` written `{id}` | the route; an optional parameter gives two paths |
 | path, query, header and cookie parameters | their parser or schema; required unless `.optional()` or the schema accepts `undefined` |
 | request body | `body(schema)` as JSON, `form()` as multipart and urlencoded |
-| success response | `201` for `POST`, `200` otherwise, `@HttpCode()`; `text/event-stream` for `@Sse()` |
+| success response | `201` for `POST`, `200` otherwise, `@HttpCode()`; its body from [`@Returns()`](controllers.md#what-a-route-returns); `text/event-stream` for `@Sse()` |
 | `400 Invalid request` | an argument that can be refused: a body, a value with a parser or schema |
 | `413`, `415` | `body()` (`415`), `form()` (`413` and `415`) |
 | guard responses and bearer token | the decorators of each guard, see [Guards](#guards); `403 Forbidden` for a guard without |
@@ -37,7 +37,7 @@ That is the whole setup: there is nothing to turn on. The document is served at 
 
 Error responses are described with the body Soda answers with, `HttpError` in the components: `statusCode`, `message` (a string, or the list of validation issues), `error`.
 
-What code does not say is not generated: a summary, a description, what a handler returns, the errors it throws itself (a `404`, a `409`). Those are what decorators are for.
+What code does not say is not generated: a summary, a description, the errors a handler throws itself (a `404`, a `409`), what it returns without `@Returns()`. Those are what decorators are for.
 
 `@All()` routes and WebSocket gateways are left out: OpenAPI has no way to say "any method", nor WebSockets.
 
@@ -109,7 +109,10 @@ A query value is described as what the client sends, a string, before `z.stringb
 | `@ApiBearerAuth(required = true)` | needs `Authorization: Bearer` | replaces what the guards say; `false` removes it |
 | `@ApiExclude()` | left out of the document | |
 
+What a route returns is not an OpenAPI decorator: `@Returns(schema)` from `@getsoda/core` describes the success response and filters what is sent, see [Controllers](controllers.md#what-a-route-returns). Prefer it to `@ApiResponses` for the success: the document cannot then say something the route does not send.
+
 ```ts
+import { Returns } from '@getsoda/core'
 import { ApiExclude, ApiOperation, ApiResponses, ApiTags } from '@getsoda/core/openapi'
 
 const User = z.object({ id: z.number().int(), name: z.string() })
@@ -119,13 +122,15 @@ const User = z.object({ id: z.number().int(), name: z.string() })
 @ApiTags('people')            // instead of `users`
 export class UsersController {
   @Get(':id', [param('id', int)])
+  @Returns(User)                                      // 200 Success, its body a User
   @ApiOperation({ summary: 'One user', description: 'By its id.' })
   @ApiResponses({
-    200: { description: 'The user', schema: User },   // replaces 200 Success
     404: { description: 'No such user' },             // adds; an error status gets HttpError
   })
-  findOne(id: number) {}
-  // responses: 200 The user, 400 Invalid request, 401 Missing or invalid token, 404 No such user
+  findOne(id: number) {
+    return this.users.get(id)
+  }
+  // responses: 200 Success (User), 400 Invalid request, 401 Missing or invalid token, 404 No such user
 
   @Get('internal')
   @ApiExclude()
@@ -142,7 +147,7 @@ Each part of an operation is built in layers, the most specific last, a later on
 3. the decorators of the controller;
 4. the decorators of the method.
 
-- **Responses** replace status by status: a `401` on the controller documents every route, a `401` on a method replaces it there, a declared `201` replaces `201 Success`. Everything else stays. An error status declared without `schema` gets `HttpError`; give a `schema` when the body is yours.
+- **Responses** replace status by status: a `401` on the controller documents every route, a `401` on a method replaces it there, a declared `201` replaces `201 Success` (with the body of `@Returns()`). Everything else stays. An error status declared without `schema` gets `HttpError`; give a `schema` when the body is yours.
 - **Operation**: field by field. `deprecated: true` on the controller stays when a method gives only a `summary`.
 - **Tags**: `@ApiTags` on a controller replaces the tag of its path, `@ApiTags()` with no name removes it; tags of a method add to the controller's.
 - **Bearer token**: the last that says replaces the others: `@ApiBearerAuth(false)` on a method behind `JwtGuard` documents it as public.
