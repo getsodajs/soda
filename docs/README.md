@@ -16,10 +16,11 @@ These pages describe the `main` branch. Soda is 0.x: the API may change between 
 8. [WebSockets](./websockets.md): gateways, messages, rooms
 9. [Rate limiting](./rate-limiting.md): limits per client and route
 10. [OpenAPI](./openapi.md): the document and Swagger UI from your routes
-11. [Logging](./logging.md): the logger, levels, JSON output
-12. [Testing](./testing.md): the application over HTTP, replaced providers
-13. [Production](./production.md): build, shutdown, proxies, limits, Docker
-14. [Checking and inspecting](./check.md): `soda check`, every startup problem at once; `soda inspect`, the application as data
+11. [CQRS](./cqrs.md): commands, queries and events, handled across modules
+12. [Logging](./logging.md): the logger, levels, JSON output
+13. [Testing](./testing.md): the application over HTTP, replaced providers
+14. [Production](./production.md): build, shutdown, proxies, limits, Docker
+15. [Checking and inspecting](./check.md): `soda check`, every startup problem at once; `soda inspect`, the application as data
 
 ## Recipes
 

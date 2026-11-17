@@ -42,6 +42,7 @@ Soda uses neither. What a method receives is listed in its route decorator, and 
 | `@nestjs/config` | `defineConfig()` + `ConfigModule`, typed by the schema |
 | `@nestjs/jwt` + `@nestjs/passport` | `@getsoda/core/jwt`: `JwtModule`, `JwtGuard` |
 | `@nestjs/throttler` | `@getsoda/core/throttler` |
+| `@nestjs/cqrs` | `@getsoda/core/cqrs`: the three buses and decorators, without sagas and `AggregateRoot` |
 | `@nestjs/swagger` with `@ApiProperty()` on each field | `@getsoda/core/openapi`, schemas from the validation |
 | `@nestjs/websockets`, `@MessageBody()`, `@ConnectedSocket()` | `@WebSocketGateway()`, `data()`, `socket()`, on Bun's WebSockets |
 

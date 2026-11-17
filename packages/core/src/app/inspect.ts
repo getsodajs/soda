@@ -20,7 +20,10 @@
  * with problems is described as far as it goes, its problems listed.
  */
 
+import { getHandlerInfo } from '../cqrs/decorators.ts'
 import { describeContainer } from '../di/container.ts'
+import { Discovery } from '../di/index.ts'
+import type { Container } from '../di/index.ts'
 import type { DescribedModule } from '../di/dry.ts'
 import type { ModuleImport } from '../di/index.ts'
 import type { Argument } from '../http/arguments.ts'
@@ -65,6 +68,15 @@ export interface InspectRoute {
   readonly events?: readonly string[]
 }
 
+/** A CQRS handler: the command, query or event it handles, as `@getsoda/core/cqrs` declares it. */
+export interface InspectHandler {
+  readonly kind: 'command' | 'query' | 'event'
+  /** The class of the message. */
+  readonly message: string
+  readonly handler: string
+  readonly module: string
+}
+
 export interface InspectReport {
   /** Version of `@getsoda/core`. */
   readonly version: string
@@ -79,6 +91,8 @@ export interface InspectReport {
   /** Imports before importers, the root last. */
   readonly modules: readonly DescribedModule[]
   readonly routes: readonly InspectRoute[]
+  /** CQRS handlers the modules provide, one entry per message they handle. */
+  readonly handlers: readonly InspectHandler[]
 }
 
 const inputOf = (arg: Argument<unknown>): InspectInput | undefined => {
@@ -131,6 +145,20 @@ const describeRoutes = (built: BuiltRoutes, moduleOf: ReadonlyMap<unknown, strin
   return routes
 }
 
+const describeHandlers = (container: Container): InspectHandler[] => {
+  const handlers: InspectHandler[] = []
+
+  for (const provider of container.get(Discovery).providers()) {
+    const info = getHandlerInfo(provider.token)
+
+    for (const message of info?.messages ?? []) {
+      handlers.push({ kind: info!.kind, message: message.name, handler: (provider.token as { name: string }).name, module: provider.module.name })
+    }
+  }
+
+  return handlers
+}
+
 /** Describes `root` with the options `createApp()` would get. Never throws and leaves nothing open. */
 export const inspectApp = async (root: ModuleImport, options: AppOptions = {}): Promise<InspectReport> => {
   const { problems, container, built, started } = await dryRun(root, options)
@@ -150,5 +178,6 @@ export const inspectApp = async (root: ModuleImport, options: AppOptions = {}): 
     interceptors: (options.interceptors ?? []).map(labelOf),
     modules: container === undefined ? [] : describeContainer(container),
     routes: built === undefined ? [] : describeRoutes(built, moduleOf),
+    handlers: container === undefined ? [] : describeHandlers(container),
   }
 }

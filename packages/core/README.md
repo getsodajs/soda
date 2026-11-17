@@ -229,6 +229,32 @@ login() {}
 
 Counts live in memory by default; a `ThrottlerStorage` shares them between instances.
 
+## CQRS
+
+`@getsoda/core/cqrs` has the command, query and event buses of `@nestjs/cqrs`, typed by the message, without RxJS:
+
+```ts
+import { Command, CommandBus, CommandHandler, CqrsModule } from '@getsoda/core/cqrs'
+
+class CreateUser extends Command<User> {
+  constructor(readonly name: string) {
+    super()
+  }
+}
+
+@CommandHandler(CreateUser)
+class CreateUserHandler {
+  execute(command: CreateUser): Promise<User> { /* ... */ }
+}
+
+@Module({ imports: [CqrsModule], providers: [CreateUserHandler] })
+class AppModule {}
+
+const user = await inject(CommandBus).execute(new CreateUser('Ada'))   // User
+```
+
+A second handler for a command is an error when the class is defined; `soda inspect` lists which provider handles each message.
+
 ## OpenAPI
 
 `@getsoda/core/openapi` describes the routes from what validates them: argument parsers and schemas implementing [Standard JSON Schema](https://standardschema.dev) (zod does). Import the module to serve the document and a Swagger UI page:

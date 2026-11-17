@@ -16,7 +16,7 @@
 
 import { readFileSync } from 'node:fs'
 import type { CheckProblem, CheckReport } from '../app/check.ts'
-import type { InspectDependency, InspectModule, InspectReport, InspectRoute } from '../app/inspect.ts'
+import type { InspectDependency, InspectHandler, InspectModule, InspectReport, InspectRoute } from '../app/inspect.ts'
 import type { Palette } from '../logger/palette.ts'
 import { drawRoutes } from '../logger/startup.ts'
 
@@ -152,6 +152,17 @@ const drawModule = (module: InspectModule, palette: Palette): string[] => {
   return lines
 }
 
+/** CQRS handlers as a table: kind, message, handler and its module. */
+const drawHandlers = (handlers: readonly InspectHandler[], palette: Palette): string[] => {
+  const { dim } = palette
+  const kindWidth = Math.max(...handlers.map((handler) => handler.kind.length))
+  const messageWidth = Math.max(...handlers.map((handler) => handler.message.length))
+
+  return handlers.map(
+    (handler) => `${INDENT}${dim(handler.kind.padEnd(kindWidth))}  ${handler.message.padEnd(messageWidth)}  ${dim('→')} ${handler.handler} ${dim(`(${handler.module})`)}`
+  )
+}
+
 export const drawInspect = (report: InspectReport, palette: Palette): string => {
   const { bold, dim, lime, coral } = palette
   const providers = report.modules.reduce((total, module) => total + module.providers.length, 0)
@@ -166,6 +177,10 @@ export const drawInspect = (report: InspectReport, palette: Palette): string => 
 
   if (routes.length > 0) {
     lines.push('', ...drawRoutes(routes, palette))
+  }
+
+  if (report.handlers.length > 0) {
+    lines.push('', ...drawHandlers(report.handlers, palette))
   }
 
   if (!report.ok) {

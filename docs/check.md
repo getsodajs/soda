@@ -3,7 +3,7 @@
 Two commands look at the application without starting it:
 
 - `soda check`: what would stop it from starting, every problem at once;
-- `soda inspect`: its modules, what each provider injects, its routes.
+- `soda inspect`: its modules, what each provider injects, its routes, its CQRS handlers.
 
 ```bash
 bun run check:app   # soda check, a script of new projects
@@ -77,6 +77,8 @@ Code before `createApp()` in the entry runs as usual: keep it free of side effec
   POST    /users      UsersController.create   body  JwtGuard
   WS      /chat       ChatGateway              message, typing
 ```
+
+With [CQRS](./cqrs.md), the handlers follow: which provider handles each command, query and event, and its module.
 
 Modules come imports first, the root last. Each provider lists what it injects, with the module that provides it when it is another one (`application` for what the application provides itself, such as the `Logger`); a dependency nobody provides is marked `✖`. An application with problems is described as far as it goes, and `soda check` says what is wrong.
 

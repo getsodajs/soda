@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { Command, CommandHandler, CqrsModule, EventsHandler } from '../cqrs/index.ts'
 import { inject, InjectionToken, Injectable, Module, optional, provide } from '../di/index.ts'
 import { body, Controller, cors, form, Get, int, param, Post, query, UseGuards } from '../http/index.ts'
 import type { CanActivate } from '../http/index.ts'
@@ -162,7 +163,36 @@ describe('inspectApp', () => {
     ])
   })
 
-  it('describes an application with problems as far as it goes, and lists them', async () => {
+  it('lists the CQRS handlers the modules provide, one entry per message', async () => {
+    class Ship extends Command {}
+
+    class Shipped {}
+
+    class Paid {}
+
+    @CommandHandler(Ship)
+    class ShipHandler {
+      execute(): void {}
+    }
+
+    @EventsHandler(Shipped, Paid)
+    class Notify {
+      handle(): void {}
+    }
+
+    @Module({ imports: [CqrsModule], providers: [ShipHandler, Notify] })
+    class ShippingModule {}
+
+    const { handlers } = await inspectApp(ShippingModule)
+
+    expect(handlers).toEqual([
+      { kind: 'command', message: 'Ship', handler: 'ShipHandler', module: 'ShippingModule' },
+      { kind: 'event', message: 'Shipped', handler: 'Notify', module: 'ShippingModule' },
+      { kind: 'event', message: 'Paid', handler: 'Notify', module: 'ShippingModule' },
+    ])
+  })
+
+    it('describes an application with problems as far as it goes, and lists them', async () => {
     class Lost {}
 
     class NeedsLost {
