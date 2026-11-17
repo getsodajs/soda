@@ -8,6 +8,8 @@ export type { Container, ContainerOptions, ControllerEntry, ResolveOptions } fro
 export { inject } from './context.ts'
 export type { InjectOptions } from './context.ts'
 export { Injectable, Module } from './decorators.ts'
+export { Discovery } from './discovery.ts'
+export type { DiscoveredProvider } from './discovery.ts'
 export type { DynamicModule, InjectableOptions, ModuleClass, ModuleDefinition, ModuleImport } from './decorators.ts'
 export { DiError } from './errors.ts'
 export type { DiErrorCode } from './errors.ts'

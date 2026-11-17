@@ -120,6 +120,17 @@ export class Database implements OnInit, OnDestroy {
 
 Hooks run on classes, factory results and `useValue` objects alike, one after another.
 
+## Finding providers
+
+A module that works with providers it does not know, as [CQRS](./cqrs.md) finds its handlers, reads them from `Discovery`, as Nest's `DiscoveryService`:
+
+```ts
+const handlers = inject(Discovery).providers().filter((provider) => isMyHandler(provider.token))
+const instance = handlers[0]?.get()
+```
+
+Each entry has its `token`, its `module` and `get()`. Call `providers()` once the application has started, in a method or in `onInit`, when every provider exists.
+
 ## Errors at startup
 
 The graph is checked when the application starts. A missing provider says which class needs it, through which chain, and how to fix it:

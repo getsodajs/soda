@@ -21,6 +21,8 @@ import { isThenable } from '../utils/promise.ts'
 import { runInContext } from './context.ts'
 import type { InjectionContext } from './context.ts'
 import { Module } from './decorators.ts'
+import { attachDiscovery, Discovery } from './discovery.ts'
+import type { DiscoveredProvider } from './discovery.ts'
 import type { DynamicModule, ModuleClass, ModuleImport } from './decorators.ts'
 import { isSafeToCheck, STUB } from './dry.ts'
 import type { DescribedDependency, DescribedModule, DescribedProvider, ReportProblem } from './dry.ts'
@@ -28,7 +30,7 @@ import { DiError } from './errors.ts'
 import { buildGraph } from './graph.ts'
 import type { ModuleGraph, ModuleNode, ProviderNode } from './graph.ts'
 import { destroyAll, initializeAll } from './lifecycle.ts'
-import { isProviderRecord } from './provider.ts'
+import { isProviderRecord, provide } from './provider.ts'
 import type { Provider, ProviderDefinition } from './provider.ts'
 import { tokenName } from './token.ts'
 import type { Constructor, Token } from './token.ts'
@@ -756,8 +758,11 @@ function attempt<R>(fn: () => R, report: ReportProblem | undefined): R | undefin
  * hooks fail too, everything is rethrown as one `AggregateError`, startup error first.
  */
 export const createContainer = async (root: ModuleImport, options: ContainerOptions = {}): Promise<Container> => {
-  const graph = await graphOf(root, options)
+  const discovery = new Discovery()
+  const graph = await graphOf(root, options, discovery)
   const resolver = new Resolver(graph)
+
+  attachDiscovery(discovery, () => discover(graph, resolver))
 
   try {
     const controllers = await createAll(graph, resolver)
@@ -783,10 +788,25 @@ export const createContainer = async (root: ModuleImport, options: ContainerOpti
   }
 }
 
-const graphOf = (root: ModuleImport, options: ContainerOptions): Promise<ModuleGraph> => {
-  const providers = options.providers ?? []
+/** The graph of `root`, with the providers of the options and `Discovery`, visible everywhere. */
+const graphOf = (root: ModuleImport, options: ContainerOptions, discovery: Discovery): Promise<ModuleGraph> =>
+  buildGraph(root, options.overrides ?? [], [providersModule([...(options.providers ?? []), provide(Discovery, { useValue: discovery })])])
 
-  return buildGraph(root, options.overrides ?? [], providers.length > 0 ? [providersModule(providers)] : [])
+/** The providers of the modules, for `Discovery`. */
+const discover = (graph: ModuleGraph, resolver: Resolver): readonly DiscoveredProvider[] => {
+  const found: DiscoveredProvider[] = []
+
+  for (const module of graph.modules) {
+    if (module.moduleClass === ContainerProvidersModule) {
+      continue
+    }
+
+    for (const node of module.providers.values()) {
+      found.push({ token: node.token, module: module.moduleClass, get: () => resolver.get(node) })
+    }
+  }
+
+  return found
 }
 
 /**
@@ -796,8 +816,11 @@ const graphOf = (root: ModuleImport, options: ContainerOptions): Promise<ModuleG
  * The container is not closed: what it holds was never initialized.
  */
 export const createDryContainer = async (root: ModuleImport, options: ContainerOptions, report: ReportProblem): Promise<Container> => {
-  const graph = await graphOf(root, options)
+  const discovery = new Discovery()
+  const graph = await graphOf(root, options, discovery)
   const resolver = new Resolver(graph, report)
+
+  attachDiscovery(discovery, () => discover(graph, resolver))
   const controllers = await createAll(graph, resolver, report)
 
   resolver.starting = false
